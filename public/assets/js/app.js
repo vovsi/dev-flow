@@ -410,7 +410,9 @@
 
     /** Рабочий день и норма часов для ползунка быстрого трека (config/params.ini, секция [worktime]) */
     const WORK_TIME = (window.DEVFLOW_CONFIG && window.DEVFLOW_CONFIG.workTime) ||
-        { start: '09:00', end: '18:00', daily_hours: 8 };
+        // Дублирует Config::WORK_TIME_DEFAULTS, включая обед: без ключей обеда ползунок молча
+        // теряет обеденную полосу и начинает трекать обед как рабочее время
+        { start: '09:00', end: '18:00', daily_hours: 8, lunch_start: '12:00', lunch_end: '13:00' };
 
     /** Дневная норма в секундах — общая и для подсветки индикатора, и для ползунка/поздравления */
     const DAILY_NORM_SECONDS = Math.round(Number(WORK_TIME.daily_hours) * 3600);

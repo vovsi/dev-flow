@@ -223,8 +223,11 @@ $assetVersion = static function (string $relativePath): string {
 </div>
 
 <script>
-    // Конфиг уходит в inline-скрипт, поэтому кодируется с JSON_HEX_* : без них строка вида
-    // </script> в params.ini разорвала бы тег и превратила значение конфига в исполняемый код
+    // Конфиг уходит в inline-скрипт, поэтому кодируется с JSON_HEX_* : без них закрывающий тег
+    // script внутри params.ini разорвал бы тег и превратил значение конфига в исполняемый код.
+    // По той же причине сам этот тег нельзя писать здесь буквально даже в комментарии —
+    // HTML-парсер закрывает <script> на первой же такой последовательности, и весь конфиг
+    // ниже перестаёт исполняться (window.DEVFLOW_CONFIG становится undefined).
     window.DEVFLOW_CONFIG = {
         githubReviewers: <?= json_encode($githubReviewers, JSON_ENCODE_FLAGS) ?>,
         workTime: <?= json_encode($workTime, JSON_ENCODE_FLAGS) ?>,
