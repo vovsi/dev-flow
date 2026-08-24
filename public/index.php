@@ -10,6 +10,17 @@ header('Cache-Control: no-cache, no-store, must-revalidate');
 header('Pragma: no-cache');
 header('Expires: 0');
 
+// Базовые защитные заголовки. Приложение не грузит ни одного внешнего ресурса и общается
+// только со своим же api/, поэтому CSP можно держать жёсткой: 'unsafe-inline' нужен лишь
+// из-за inline-скрипта с DEVFLOW_CONFIG и inline-стилей в разметке модалок.
+header(
+    "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; "
+    . "style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
+    . "base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'"
+);
+header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: no-referrer');
+
 // Конфиг не обязателен для запуска приложения (см. README) — при отсутствии config/params.ini
 // страница всё равно должна открыться: просто без --reviewer в команде gh и с рабочим днём
 // по умолчанию у ползунка быстрого трека времени.
@@ -26,6 +37,9 @@ try {
     $reviewSkipMigrationRepos = [];
     $reviewDocLinks = [];
 }
+
+// Флаги кодирования конфига для inline-скрипта (см. window.DEVFLOW_CONFIG в конце страницы)
+const JSON_ENCODE_FLAGS = JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 
 // Версия статики = время последнего изменения файла: при каждой правке CSS/JS
 // у ссылки меняется ?v=..., и браузер больше не подставляет закешированную версию.
@@ -209,11 +223,13 @@ $assetVersion = static function (string $relativePath): string {
 </div>
 
 <script>
+    // Конфиг уходит в inline-скрипт, поэтому кодируется с JSON_HEX_* : без них строка вида
+    // </script> в params.ini разорвала бы тег и превратила значение конфига в исполняемый код
     window.DEVFLOW_CONFIG = {
-        githubReviewers: <?= json_encode($githubReviewers, JSON_UNESCAPED_UNICODE) ?>,
-        workTime: <?= json_encode($workTime, JSON_UNESCAPED_UNICODE) ?>,
-        reviewSkipMigrationRepos: <?= json_encode($reviewSkipMigrationRepos, JSON_UNESCAPED_UNICODE) ?>,
-        reviewDocLinks: <?= json_encode($reviewDocLinks, JSON_UNESCAPED_UNICODE | JSON_FORCE_OBJECT) ?>
+        githubReviewers: <?= json_encode($githubReviewers, JSON_ENCODE_FLAGS) ?>,
+        workTime: <?= json_encode($workTime, JSON_ENCODE_FLAGS) ?>,
+        reviewSkipMigrationRepos: <?= json_encode($reviewSkipMigrationRepos, JSON_ENCODE_FLAGS) ?>,
+        reviewDocLinks: <?= json_encode($reviewDocLinks, JSON_ENCODE_FLAGS | JSON_FORCE_OBJECT) ?>
     };
 </script>
 <script src="assets/js/app.js?v=<?= $assetVersion('assets/js/app.js') ?>"></script>

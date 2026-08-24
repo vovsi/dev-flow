@@ -437,10 +437,28 @@
 
     // ==================== Утилиты ====================
 
+    // Экранируем вручную, а не через textContent + innerHTML: тот вариант не трогает кавычки,
+    // а результат подставляется и внутрь атрибутов (href, placeholder) — значение с кавычкой
+    // выходило из атрибута и позволяло дописать в тег свой обработчик
     function escapeHtml(value) {
-        const div = document.createElement('div');
-        div.textContent = value;
-        return div.innerHTML;
+        return String(value === null || value === undefined ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    /**
+     * Ссылка для href: пускаем только http(s). Ссылка задачи приходит из БД (её однажды ввёл
+     * пользователь) и из base_url Jira, поэтому старая запись со схемой `javascript:` иначе
+     * исполнила бы код по клику. Валидация на бэкенде (TaskService) закрывает новые записи,
+     * эта — уже сохранённые.
+     */
+    function safeHttpUrl(value) {
+        const url = String(value === null || value === undefined ? '' : value).trim();
+
+        return /^https?:\/\//i.test(url) ? url : '';
     }
 
     function prLinkStorageKey() {
@@ -938,7 +956,7 @@
         linkScreen.classList.add('hidden');
         taskScreen.classList.remove('hidden');
         taskIdLabel.textContent = state.task.task_id;
-        taskIdLabel.href = state.task.task_link;
+        taskIdLabel.href = safeHttpUrl(state.task.task_link);
         renderGitBranch();
         renderChecklist();
         changeTaskBtn.classList.remove('hidden'); // возврат к вводу ссылки есть только внутри задачи
@@ -2184,7 +2202,7 @@
                 .map(
                     (task) =>
                         '<a class="today-task-item" href="' +
-                        escapeHtml(task.link) +
+                        escapeHtml(safeHttpUrl(task.link)) +
                         '" target="_blank" rel="noopener">' +
                         `<span class="today-task-id">${escapeHtml(task.task_id)}</span>` +
                         `<span class="today-task-title">${escapeHtml(task.title)}</span>` +

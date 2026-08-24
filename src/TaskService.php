@@ -37,6 +37,8 @@ final class TaskService
             );
         }
 
+        $this->assertLinkSchemeIsWeb($link);
+
         $existing = $this->tasks->findByLinkOrTaskId($link, $taskId);
 
         if ($existing !== null) {
@@ -61,6 +63,25 @@ final class TaskService
             'checklist' => $this->checklist->getStatusesForTask((int) $task['id']),
             'isNew' => true,
         ];
+    }
+
+    /**
+     * Пускает только ссылки со схемой http/https (или сам ключ задачи, у него схемы нет).
+     * Ссылка сохраняется в БД как есть и подставляется на фронте в href заголовка задачи,
+     * поэтому строка вида `javascript:alert(1)/PROJ-1` — она тоже содержит ключ задачи и
+     * раньше проходила валидацию — превращала заголовок в ссылку, исполняющую код по клику.
+     *
+     * @throws RuntimeException если схема ссылки не http/https
+     */
+    private function assertLinkSchemeIsWeb(string $link): void
+    {
+        $scheme = strtolower((string) (parse_url(trim($link), PHP_URL_SCHEME) ?? ''));
+
+        if ($scheme !== '' && $scheme !== 'http' && $scheme !== 'https') {
+            throw new RuntimeException(
+                'Ссылка на задачу должна начинаться с http:// или https:// — вставьте адрес задачи из браузера'
+            );
+        }
     }
 
     /**

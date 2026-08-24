@@ -18,7 +18,8 @@ final class JiraClient
         private readonly string $apiToken,
         private readonly string $storyPointsFieldId = 'customfield_10016',
         private readonly string $pullRequestStatusName = 'Pull request',
-        private readonly string $doingStatusName = 'Doing',
+        /** @var list<string> */
+        private readonly array $doingStatusNames = ['Doing'],
     ) {
     }
 
@@ -83,7 +84,7 @@ final class JiraClient
     /** Переводит задачу в статус $pullRequestStatusName (например «Pull request») через Jira transitions API */
     public function transitionToPullRequest(string $taskId): void
     {
-        $transitionId = $this->findTransitionId($taskId, $this->pullRequestStatusName);
+        $transitionId = $this->findTransitionId($taskId, [$this->pullRequestStatusName]);
         if ($transitionId === null) {
             throw new RuntimeException(
                 "В Jira не найден переход в статус «{$this->pullRequestStatusName}» для задачи {$taskId}"
@@ -98,13 +99,14 @@ final class JiraClient
         );
     }
 
-    /** Переводит задачу в статус $doingStatusName (например «Doing») через Jira transitions API */
+    /** Переводит задачу в первый найденный из статусов $doingStatusNames (например «Doing») через Jira transitions API */
     public function transitionToDoing(string $taskId): void
     {
-        $transitionId = $this->findTransitionId($taskId, $this->doingStatusName);
+        $transitionId = $this->findTransitionId($taskId, $this->doingStatusNames);
         if ($transitionId === null) {
+            $statusList = implode('», «', $this->doingStatusNames);
             throw new RuntimeException(
-                "В Jira не найден переход в статус «{$this->doingStatusName}» для задачи {$taskId}"
+                "В Jira не найден переход в статус «{$statusList}» для задачи {$taskId}"
             );
         }
 
@@ -116,8 +118,14 @@ final class JiraClient
         );
     }
 
-    /** Ищет id перехода по названию целевого статуса среди доступных для задачи переходов */
-    private function findTransitionId(string $taskId, string $statusName): ?string
+    /**
+     * Ищет id перехода среди доступных для задачи переходов по списку названий целевого
+     * статуса, в порядке приоритета — первое совпадение из $statusNames и выигрывает, даже
+     * если дальше по списку транзиций встретится ещё одно имя-кандидат.
+     *
+     * @param list<string> $statusNames
+     */
+    private function findTransitionId(string $taskId, array $statusNames): ?string
     {
         $data = $this->request(
             'GET',
@@ -127,13 +135,15 @@ final class JiraClient
         );
         $transitions = is_array($data['transitions'] ?? null) ? $data['transitions'] : [];
 
-        foreach ($transitions as $transition) {
-            // Сравниваем с названием целевого статуса (transition.to.name), а не с названием
-            // самого перехода (transition.name) — это название кнопки-действия в workflow
-            // и может не совпадать с именем статуса, в который она ведёт.
-            $targetStatusName = (string) ($transition['to']['name'] ?? $transition['name'] ?? '');
-            if ($targetStatusName !== '' && strcasecmp($targetStatusName, $statusName) === 0) {
-                return (string) $transition['id'];
+        foreach ($statusNames as $statusName) {
+            foreach ($transitions as $transition) {
+                // Сравниваем с названием целевого статуса (transition.to.name), а не с названием
+                // самого перехода (transition.name) — это название кнопки-действия в workflow
+                // и может не совпадать с именем статуса, в который она ведёт.
+                $targetStatusName = (string) ($transition['to']['name'] ?? $transition['name'] ?? '');
+                if ($targetStatusName !== '' && strcasecmp($targetStatusName, $statusName) === 0) {
+                    return (string) $transition['id'];
+                }
             }
         }
 

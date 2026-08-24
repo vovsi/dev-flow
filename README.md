@@ -146,13 +146,22 @@ docker compose up -d --build
 ```
 
 Or without Docker, with a local PHP (from the project root — this matters, the document root is
-the root itself, not `public/`):
+the root itself, not `public/`). **`router.php` is required**: the document root is the whole
+project, and the router is what keeps everything except `public/` and `api/` off the network —
+without it `config/params.ini` (your tokens), `storage/app.sqlite` and `.git` would be
+downloadable over HTTP:
 
 ```bash
-php -S localhost:8000
+php -S localhost:8000 router.php
 ```
 
-Then open: **http://localhost:8000/public/index.php**
+Then open: **http://localhost:8000/public/index.php** (or just http://localhost:8000 — it
+redirects there).
+
+The app has no authentication, so it is bound to `localhost` only. Docker publishes the port the
+same way (`127.0.0.1:8000:8000` in `docker-compose.yml`) — do not change it to `0.0.0.0`, or
+everyone on your Wi-Fi could open your tasks, log time to your Jira and spend your LLM tokens.
+Also keep the config readable by you alone: `chmod 600 config/params.ini`.
 
 The database file (`storage/app.sqlite`) is created on first open, and the schema and the
 checklist items are applied automatically — there are no migrations to run by hand.
@@ -496,6 +505,7 @@ ticks exactly as they were.
 |---|---|---|
 | The app | Open http://localhost:8000/public/index.php | The screen with the "task link" field |
 | The database | `ls -la storage/app.sqlite` | The file appeared after the first open |
+| Secrets are not exposed | `curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/config/params.ini` | `404` — the router serves nothing but `public/` and `api/` |
 | Jira | Paste a link to a real task | The task key shows up on top, the checklist renders; the "time logged today" indicator appears in the top left |
 | Jira (token) | `curl -s -u "email:token" "https://your-domain.atlassian.net/rest/api/2/myself"` | JSON with your account, not a `401` |
 | The dashboard | Look above the "task link" field | The blue "Зависшие PR > 24 ч" tile with a number; clicking it opens the task list |
@@ -520,7 +530,10 @@ PHP logs when running under Docker: `docker compose logs -f app`.
 
 | Symptom | Cause and fix |
 |---|---|
-| Blank page / 404 on open | The server wasn't started from the project root. You need `php -S localhost:8000` **from the root** and the `/public/index.php` path — the frontend calls the API over the relative `../api/` path |
+| Blank page / 404 on open | The server wasn't started from the project root, or `router.php` was left out. You need `php -S localhost:8000 router.php` **from the root** and the `/public/index.php` path — the frontend calls the API over the relative `../api/` path |
+| `404` on any path outside `public/` and `api/` | That is `router.php` doing its job — only those two directories are served over HTTP. Add a new public directory to `ALLOWED_PREFIXES` in `router.php` instead of dropping the router |
+| `403 Запрос отклонён: недопустимый источник` (request rejected) | An API call arrived from another origin. The endpoints only accept requests from the app's own page (CSRF protection in `api/_bootstrap.php`) — open the app itself instead of calling the API from another site or tool |
+| A PHP error shows as an empty response instead of a stack trace | Intended: error output is off (the trace can contain your tokens). Read it in the server log — `docker compose logs -f app` |
 | `could not find driver` | The `pdo_sqlite` extension is missing. Check `php -m \| grep pdo_sqlite`; under Docker it is already built in |
 | `unable to open database file` | No write permission on `storage/` → `chmod -R 775 storage` |
 | "Не удалось распознать ссылку на задачу" (link not recognized) | The link contains no `PROJ-123`-style key. `.../browse/PROJ-123`, `?selectedIssue=PROJ-123` or plain `PROJ-123` all work |
@@ -540,6 +553,8 @@ PHP logs when running under Docker: `docker compose logs -f app`.
 ## Project structure
 
 ```
+router.php                 — built-in PHP server router: serves only public/ and api/,
+                             keeps params.ini, storage/ and .git off the network
 config/params.ini          — the only settings file (not in git, see params.ini.example)
 database/schema.sql        — SQLite schema (tasks, checklist, task_checklist)
 storage/                   — created automatically: app.sqlite + the exchange rate cache (not in git)

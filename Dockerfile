@@ -12,5 +12,7 @@ RUN mkdir -p storage && chmod -R 775 storage
 
 EXPOSE 8000
 
-# Встроенный сервер PHP, корень — весь проект (нужно для относительных путей public/ -> ../api/)
-CMD ["php", "-S", "0.0.0.0:8000", "-t", "/app"]
+# Встроенный сервер PHP, корень — весь проект (нужно для относительных путей public/ -> ../api/).
+# router.php обязателен: без него по HTTP доступны config/params.ini с токенами, storage/app.sqlite
+# и .git — он отдаёт только public/ и api/ (см. router.php).
+CMD ["php", "-S", "0.0.0.0:8000", "-t", "/app", "/app/router.php"]

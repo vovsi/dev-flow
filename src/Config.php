@@ -147,13 +147,20 @@ final class Config
         return $status !== '' ? $status : 'Pull request';
     }
 
-    /** Название статуса Jira для перехода по пункту «Перевести в статус Doing». Не задано в конфиге — по умолчанию "Doing" */
-    public static function atlassianDoingStatus(): string
+    /**
+     * Названия статусов Jira для перехода по пункту «Перевести в статус Doing», в порядке
+     * приоритета — первый найденный в workflow задачи переход и будет использован. Формат —
+     * «Doing, В работе» (см. commaList()): так можно задать основное название статуса и
+     * запасные, если в разных проектах Jira команды оно называется по-разному. Не задано в
+     * конфиге — по умолчанию только "Doing".
+     *
+     * @return list<string>
+     */
+    public static function atlassianDoingStatuses(): array
     {
-        $data = self::load();
-        $status = trim((string) ($data['atlassian']['doing_status'] ?? ''));
+        $statuses = self::commaList(self::load()['atlassian'] ?? [], 'doing_status');
 
-        return $status !== '' ? $status : 'Doing';
+        return $statuses !== [] ? $statuses : ['Doing'];
     }
 
     /**
