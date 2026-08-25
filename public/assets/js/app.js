@@ -271,6 +271,8 @@
     const todayTasksBtn = document.getElementById('today-tasks-btn');
     const settingsBtn = document.getElementById('settings-btn');
     const themePopover = document.getElementById('theme-popover');
+    const claudeSettingsSection = document.getElementById('claude-settings-section');
+    const claudeNotificationsToggle = document.getElementById('claude-notifications-toggle');
     const toastEl = document.getElementById('toast');
     const tooltipEl = document.getElementById('tooltip');
     const modalOverlay = document.getElementById('modal-overlay');
@@ -798,6 +800,42 @@
             applyTheme(btn.dataset.theme);
             themePopover.classList.add('hidden');
         });
+    });
+
+    // ==================== Уведомления Claude Code (раздел «Claude» в настройках) ====================
+
+    /**
+     * Читает состояние тумблера при инициализации (не только при открытии попапа — попап
+     * может открыться раньше ответа, тогда секция появится с задержкой). Фича опциональна:
+     * секция [claude] не заполнена в config/params.ini — available=false, раздел остаётся
+     * скрытым (тот же приём, что у дашборда/Jira).
+     */
+    async function loadClaudeSettings() {
+        try {
+            const data = await apiCall('../api/get_claude_settings.php', {});
+            if (!data.available) return;
+            claudeNotificationsToggle.checked = !!data.enabled;
+            claudeSettingsSection.classList.remove('hidden');
+        } catch (e) {
+            // Недоступно — раздел просто не показываем, это не ошибка пользователя
+        }
+    }
+
+    // Тумблер пишет только в локальный settings.json (без обращения к Telegram) — запрос
+    // быстрый, отдельная индикация загрузки не нужна (см. правило в CLAUDE.md)
+    claudeNotificationsToggle.addEventListener('change', async () => {
+        const enabled = claudeNotificationsToggle.checked;
+        claudeNotificationsToggle.disabled = true;
+        try {
+            const data = await apiCall('../api/toggle_claude_notifications.php', { enabled });
+            claudeNotificationsToggle.checked = data.enabled;
+            showToast(data.enabled ? 'Уведомления Claude включены' : 'Уведомления Claude выключены');
+        } catch (e) {
+            claudeNotificationsToggle.checked = !enabled; // откатываем визуально
+            showToast(e.message || 'Не удалось изменить настройки Claude');
+        } finally {
+            claudeNotificationsToggle.disabled = false;
+        }
     });
 
     // ==================== Дропдаун git-команд у названия ветки ====================
@@ -2444,6 +2482,7 @@
     initTheme();
     loadTodayTimeSpent();
     loadDashboard();
+    loadClaudeSettings();
 
     /** Возврат к окну обновляет и индикатор времени, и показатели дашборда — у каждого свой
      * троттлинг, но событие и проверка видимости общие */

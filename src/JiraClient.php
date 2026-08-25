@@ -311,8 +311,14 @@ final class JiraClient
      * Момент попадания в статус берём из истории изменений (status CHANGED TO ... BEFORE),
      * а не из полей updated/statuscategorychangedate: updated меняет любой комментарий,
      * а категория статуса у Doing и Pull request одна и та же, и её дата не обновляется.
-     * Задача, успевшая выйти из статуса и вернуться в него после $changedBefore,
-     * в выборку тоже попадёт — точность здесь не стоит запроса changelog по каждой задаче.
+     *
+     * JQL «status CHANGED TO ... BEFORE ...» проверяет сам факт перехода в статус когда-либо
+     * до даты-порога, а не то, что *последний* переход произошёл до неё — поэтому задача,
+     * успевшая выйти из статуса и вернуться в него уже после $changedBefore, тоже попадёт в
+     * выборку. Кандидатов из JQL обычно единицы, поэтому по каждому из них дозапрашивается
+     * changelog (`lastTransitionToStatus()`) и отсеиваются те, чей реальный последний переход
+     * в статус случился не раньше $changedBefore — лишнего запроса на каждую задачу пользователя
+     * это не требует, только на уже отфильтрованных JQL кандидатов.
      *
      * @return list<array{task_id: string, title: string, status: string, link: string}>
      */
@@ -342,6 +348,14 @@ final class JiraClient
             if ($key === '') {
                 continue;
             }
+
+            $lastChangedAt = $this->lastTransitionToStatus($key, $statusName);
+            if ($lastChangedAt !== null && $lastChangedAt->getTimestamp() >= $changedBefore->getTimestamp()) {
+                // Реальный последний переход в статус случился позже порога — задача не зависла,
+                // JQL нашёл её по более старому переходу (см. комментарий метода выше)
+                continue;
+            }
+
             $result[] = [
                 'task_id' => $key,
                 'title' => (string) ($issue['fields']['summary'] ?? ''),
@@ -351,6 +365,46 @@ final class JiraClient
         }
 
         return $result;
+    }
+
+    /**
+     * Момент последнего перехода задачи в статус $statusName по истории изменений.
+     * null — переход не нашёлся в возвращённой истории (не должно случаться для задачи,
+     * уже отобранной JQL-условием «status CHANGED TO», но не повод ронять показатель).
+     *
+     * Историй у персональной задачи заведомо меньше 100 — второй страницы не запрашиваем.
+     */
+    private function lastTransitionToStatus(string $taskId, string $statusName): ?DateTimeImmutable
+    {
+        $data = $this->request(
+            'GET',
+            '/rest/api/2/issue/' . rawurlencode($taskId) . '/changelog?maxResults=100',
+            null,
+            "при получении истории статусов задачи {$taskId}"
+        );
+        $histories = is_array($data['values'] ?? null) ? $data['values'] : [];
+
+        // changelog отдаёт истории в хронологическом порядке — последнее совпадение и есть
+        // самый недавний переход в статус
+        $lastChangedAt = null;
+        foreach ($histories as $history) {
+            $items = is_array($history['items'] ?? null) ? $history['items'] : [];
+            foreach ($items as $item) {
+                if (
+                    (string) ($item['field'] ?? '') !== 'status'
+                    || strcasecmp((string) ($item['toString'] ?? ''), $statusName) !== 0
+                ) {
+                    continue;
+                }
+
+                $timestamp = strtotime((string) ($history['created'] ?? ''));
+                if ($timestamp !== false) {
+                    $lastChangedAt = new DateTimeImmutable('@' . $timestamp);
+                }
+            }
+        }
+
+        return $lastChangedAt;
     }
 
     /** Ссылка на задачу в веб-интерфейсе Jira (base_url из конфига + /browse/КЛЮЧ) */

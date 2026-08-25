@@ -115,6 +115,9 @@ src/
   DashboardService.php     — числовые показатели дашборда на экране ввода ссылки (Service
                              поверх JiraSyncService; порог «зависания» — константа класса)
   ExchangeRateClient.php   — курс USD→валюта из [currency], файловый кэш на 6 часов (Client)
+  ClaudeHooksService.php   — вкл/выкл блок hooks (Notification/Stop → Telegram) в settings.json
+                             Claude Code десктопного приложения; опциональность — в
+                             ClaudeHooksService::createFromConfig() (Service)
 api/
   _bootstrap.php            — общий бутстрап для эндпоинтов (автозагрузка, JSON in/out,
                               проверка источника запроса — см. «Безопасность»)
@@ -138,6 +141,8 @@ api/
   generate_deploy_instruction.php — POST: оформить блок инструкции выливки отдельно (LLM)
   generate_motivation_quote.php — POST: случайная цитата из открытого API + перевод (LLM)
   calc_earnings.php          — POST: посчитать заработок за отработанные секунды (валюта из конфига)
+  get_claude_settings.php    — POST: read-only состояние тумблера уведомлений Claude Code
+  toggle_claude_notifications.php — POST: включить/выключить хуки Claude Code в settings.json
 public/
   index.php                 — единственная HTML-страница приложения
   assets/css/style.css      — стили (светлая/тёмная тема, glass-эффект в духе macOS)
@@ -148,7 +153,10 @@ docs/                       — скриншоты для README (светлая
 router.php                  — роутер встроенного PHP-сервера: отдаёт по HTTP только public/ и
                               api/, всё остальное (config/params.ini, storage/, .git, .idea,
                               src/) — 404. Обязателен при любом запуске, см. «Безопасность»
-Dockerfile, docker-compose.yml — контейнерный запуск, весь проект смонтирован как volume
+Dockerfile, docker-compose.yml — контейнерный запуск, весь проект смонтирован как volume;
+                              отдельным volume — settings.json Claude Code десктопного
+                              приложения с хоста (`${HOME}/.claude/settings.json`), нужен
+                              только тумблеру уведомлений ([claude], ClaudeHooksService)
 ```
 
 ## Архитектура
@@ -187,6 +195,11 @@ Dockerfile, docker-compose.yml — контейнерный запуск, вес
   `createFromConfig()`.
   **Новый числовой показатель — это метод-расчёт + строка в `DashboardService::metrics()`**,
   эндпоинт при этом не меняется.
+  Тот же фабричный метод (опциональность через `createFromConfig()` → `null`, если секция
+  конфига не заполнена) — у `ClaudeHooksService` (тумблер уведомлений Claude Code, `[claude]`):
+  единственный Service в проекте, который не оркестрирует HTTP-клиент, а читает/пишет чужой
+  файл — `settings.json` Claude Code десктопного приложения на хосте, смонтированный в
+  контейнер отдельным volume (см. «Конфигурация» и docker-compose.yml).
 - **Client (транспорт без бизнес-логики)** — `JiraClient` (Jira REST API v2, Basic Auth
   email+token), `LlmClient` (локальная нейронка / LM Studio, `POST <host>/api/v1/chat`),
   `AnthropicLlmClient` (Claude, `POST https://api.anthropic.com/v1/messages`, заголовки
@@ -342,11 +355,27 @@ task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id)
   (`Config::claudeCodeSkillMode()` → `ChecklistRepository`, см. бизнес-правила). Единственный
   геттер `Config`, который сам глотает отсутствие `params.ini` — чек-лист обязан работать и
   без настроенных интеграций.
+- **`[claude]`** — тумблер «Уведомления» в разделе «Claude» настроек приложения (иконка
+  шестерёнки). `telegram_bot_token`/`telegram_chat_id` обязательны — без них
+  `Config::claudeNotifications()` бросает исключение, `ClaudeHooksService::createFromConfig()`
+  ловит его и отдаёт `null`, раздел «Claude» на фронте не показывается вовсе (тот же приём, что
+  у `[atlassian]`/`[llm]`). `notification_text`/`stop_text` — необязательные тексты сообщений
+  Notification/Stop, дефолты — `Config::CLAUDE_DEFAULTS`. `settings_path` — путь к
+  `settings.json` **глазами контейнера**, не хоста (по умолчанию `/claude/settings.json`);
+  сам файл — это `~/.claude/settings.json` реального пользователя на хосте, смонтированный в
+  docker-compose.yml отдельным volume (`${HOME}/.claude/settings.json:/claude/settings.json`,
+  не через `${HOME}` в самом `params.ini` — ini-файл переменные окружения не разворачивает).
+  Тумблер не хранит состояние отдельно — «включено» проверяется по факту наличия непустого
+  ключа `hooks` в файле (`ClaudeHooksService::isEnabled()`), включение перезаписывает `hooks`
+  блоком из двух хуков (`Notification`, `Stop`, каждый — команда `curl` в Telegram Bot API),
+  выключение удаляет ключ `hooks` целиком, не трогая остальной файл. **Единственная фича
+  проекта, которая пишет за пределы контейнера** — см. «Безопасность» про то, почему
+  смонтирован только сам файл, а не весь `~/.claude`.
 
 Некорректные/отсутствующие значения `[worktime]`, `[dashboard]`, `[salary]`, `[currency]` и `[services]` молча
 заменяются дефолтами (не роняют приложение); отсутствие `[atlassian]`/`[llm]` отключает
-соответствующие фичи целиком; отсутствие `[git]`/`[templates]`/`[docs]` просто убирает из
-интерфейса и текстов соответствующие куски.
+соответствующие фичи целиком; отсутствие `[git]`/`[templates]`/`[docs]`/`[claude]` просто убирает
+из интерфейса и текстов соответствующие куски.
 
 Перечисления (`[github].reviewers`, `[git].rebase_targets`, `[templates].review_skip_migration_repos`)
 разбираются одним приватным хелпером `Config::commaList()` — формат «через запятую» у всех
@@ -707,9 +736,13 @@ Read-only (`DashboardService::metrics()`): считает числовые по�
 (через тот же `/rest/api/2/search/jql`, что и сегодняшние ворклоги; выборка ограничена 100 задачами).
 **Момент попадания в статус берётся из истории изменений**, а не из `updated`
 (его меняет любой комментарий) и не из `statuscategorychangedate` (у Doing и Pull request одна
-категория, дата не обновляется). Задачу, успевшую выйти из статуса и вернуться в него после
-даты-порога, выборка тоже покажет — точность здесь не стоит запроса changelog по каждой
-задаче. 422 — интеграция с Jira не настроена; 502 — ошибка Jira.
+категория, дата не обновляется). Сам JQL (`status CHANGED TO ... BEFORE ...`) проверяет лишь
+факт когда-либо случившегося перехода до даты-порога, поэтому нашедшихся кандидатов
+`JiraClient::fetchIssuesStuckInStatus()` дополнительно фильтрует по changelog
+(`lastTransitionToStatus()`): задача, успевшая выйти из статуса и вернуться в него уже после
+даты-порога, в показатель не попадает — учитывается именно последний переход, а не любой.
+Дозапрос идёт только по уже отфильтрованным JQL кандидатам (их единицы), а не по всем задачам
+пользователя. 422 — интеграция с Jira не настроена; 502 — ошибка Jira.
 
 **Нерабочие дни в счёт часов «зависания» не идут** (`[worktime].non_working_days`, по умолчанию
 сб и вс): перевели PR в пятницу 17:00 — при пороге 24 ч он станет зависшим только в
@@ -1022,6 +1055,39 @@ API (`[services].exchange_rate_url`) через `ExchangeRateClient` (файло
 берётся из ответа, на фронте её не хардкодить**. Строка заработка в модалке не показывается,
 если запрос не удался или вернул `0`.
 
+### `POST /api/get_claude_settings.php` — состояние тумблера уведомлений Claude Code
+
+Запрос: `{}` (без параметров)
+
+Read-only (`ClaudeHooksService::isEnabled()`): читает `settings.json` Claude Code и проверяет,
+есть ли там непустой ключ `hooks`. `available: false` — секция `[claude]` не заполнена в
+`config/params.ini` (`createFromConfig()` вернул `null`) — раздел «Claude» на фронте не
+показывается вовсе, а не показывается выключенным. 502 — файл `settings.json` существует, но
+не читается или содержит невалидный JSON.
+
+Ответ: `{ "available": true, "enabled": false }`
+
+Вызывается при инициализации приложения (`loadClaudeSettings()` в `app.js`, рядом с
+`loadDashboard()`/`loadTodayTimeSpent()`) — так раздел «Claude» и состояние тумблера готовы уже
+к моменту первого открытия попапа настроек, без отдельного запроса по клику на шестерёнку.
+
+### `POST /api/toggle_claude_notifications.php` — включить/выключить хуки Claude Code
+
+Запрос: `{ "enabled": true }`
+
+Логика (`ClaudeHooksService::setEnabled()`): `enabled: true` — записывает в `settings.json`
+блок `hooks` из двух хуков (`Notification`, `Stop`, тексты — `notification_text`/`stop_text` из
+`[claude]`), `enabled: false` — удаляет ключ `hooks` целиком, каким бы он ни был. 422 —
+`[claude]` не настроена; 502 — `settings.json` не читается/не пишется (невалидный JSON, файл не
+смонтирован, нет прав на запись).
+
+Ответ: `{ "enabled": true }`
+
+Вызывается по переключению тумблера «Уведомления» в разделе «Claude» настроек — без модалки,
+эндпоинт не ходит во внешний сервис (пишет только локальный файл), поэтому без индикации
+загрузки (см. правило про четыре способа индикации выше); при ошибке фронт откатывает тумблер
+визуально и показывает тост с текстом ошибки.
+
 ## Frontend (`public/`)
 
 - `index.php` — единственная страница. Генерирует версию статики `?v=<mtime файла>` для
@@ -1164,6 +1230,18 @@ API (`[services].exchange_rate_url`) через `ExchangeRateClient` (файло
     `onRender`, у скрытого ползунка ширина нулевая и позиции посчитались бы неверно;
   - кнопка «Затрекать» заблокирована, пока добавлять нечего (`.btn:disabled`), после успеха —
     тост и `loadTodayTimeSpent()`.
+- Попап настроек (`#theme-popover`, открывается иконкой шестерёнки в правом верхнем углу) —
+  выбор темы (Светлая/Тёмная) и, если `[claude]` заполнена, раздел «Claude» под разделителем
+  (`.popover-divider`/`.popover-label`) с единственным тумблером «Уведомления»
+  (`#claude-notifications-toggle`, разметка `.toggle-switch` — общий iOS-стиль переключателя,
+  других тумблеров в приложении нет, новый заводи через тот же класс). Состояние подгружается
+  один раз при инициализации (`loadClaudeSettings()`, рядом с `loadDashboard()`), а не при
+  каждом открытии попапа — секция `#claude-settings-section` остаётся `hidden`, пока
+  `api/get_claude_settings.php` не ответит `available: true`; конфиг не заполнен — секция
+  скрыта навсегда, второго запроса при клике на шестерёнку нет. Переключение тумблера дёргает
+  `api/toggle_claude_notifications.php` напрямую (`change`, без модалки и без спиннера — см.
+  описание эндпоинта выше про отсутствие индикации), при ошибке тумблер откатывается визуально
+  и показывается тост с текстом ошибки из ответа API.
 - Дропдаун git-команд (`gitActionsBtn`/`gitActionsPopover`) — открывается по клику у названия
   ветки внизу экрана (виден только когда `tasks.git_branch` задан, см. `renderGitBranch()`),
   список команд не хранится в БД и не связан с чек-листом — карта `code → команда`
@@ -1242,6 +1320,12 @@ API (`[services].exchange_rate_url`) через `ExchangeRateClient` (файло
 - **SQL — только через prepared statements** (весь SQL живёт в репозиториях), путей из запроса
   в файловые операции не попадает, `shell_exec`/`eval` в проекте нет — так и держим.
 - `config/params.ini` держим с правами `600` (см. README).
+- **`ClaudeHooksService` — единственное место в проекте, где приложение пишет за пределы
+  контейнера, в реальный файл на хосте** (`settings.json` Claude Code десктопного приложения).
+  Поэтому в `docker-compose.yml` смонтирован volume-ом только этот один файл
+  (`${HOME}/.claude/settings.json`), а не весь каталог `~/.claude` — там же токены MCP-серверов
+  и история сессий, которым в приложении делать нечего. Расширяя эту фичу — не меняй эту
+  границу на «смонтировать каталог целиком ради удобства».
 
 ## Запуск
 

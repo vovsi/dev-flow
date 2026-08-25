@@ -131,3 +131,20 @@ quotes_url = "https://zenquotes.io/api/random"
 ; как были. Полный список скрываемых пунктов — ChecklistRepository::CLAUDE_CODE_SKILL_MODE_HIDDEN_CODES.
 [mode]
 claude_code_skill_mode = "1"
+
+; Уведомления Claude Code (десктопное приложение) в Telegram — тумблер в разделе «Claude»
+; настроек DevFlow (иконка шестерёнки). Включение записывает в settings.json Claude Code блок
+; hooks на события Notification/Stop (curl в Telegram), выключение — удаляет ключ hooks целиком
+; (что бы в нём ни лежало). settings.json смонтирован в контейнер как /claude/settings.json
+; (см. docker-compose.yml, ${HOME}/.claude/settings.json с хоста).
+; telegram_bot_token/telegram_chat_id обязательны — не заданы, раздел «Claude» просто не
+; показывается в настройках. Токен бота — от @BotFather, chat_id — свой numeric id
+; (например через @userinfobot).
+; settings_path — необязательно, путь глазами приложения; по умолчанию /claude/settings.json.
+; notification_text/stop_text — необязательно, тексты сообщений; дефолты — как были раньше
+; в settings.json этого пользователя.
+[claude]
+telegram_bot_token = "123456:AA...your-bot-token"
+telegram_chat_id = "000000000"
+notification_text = "🔔 Claude Code просит внимания!"
+stop_text = "✅ Claude Code завершил задачу!"

@@ -45,6 +45,17 @@ final class Config
         'quotes_url' => 'https://zenquotes.io/api/random',
     ];
 
+    /**
+     * Значения [claude] по умолчанию (см. claudeNotifications()). settings_path — путь к
+     * settings.json Claude Code глазами приложения: каталог ~/.claude смонтирован в контейнер
+     * как /claude (см. docker-compose.yml).
+     */
+    public const CLAUDE_DEFAULTS = [
+        'settings_path' => '/claude/settings.json',
+        'notification_text' => '🔔 Claude Code просит внимания!',
+        'stop_text' => '✅ Claude Code завершил задачу!',
+    ];
+
     /** Названия дней недели для [worktime].non_working_days → номер ISO-8601 (сравнение по первым трём буквам) */
     private const WEEKDAY_ALIASES = [
         'mon' => 1,
@@ -408,6 +419,37 @@ final class Config
         }
 
         return trim((string) ($section['claude_code_skill_mode'] ?? '')) === '1';
+    }
+
+    /**
+     * Настройки уведомлений Claude Code (раздел «Claude» в настройках приложения) —
+     * тумблер собирает из них блок hooks в settings.json (см. ClaudeHooksService).
+     * Токен и chat_id обязательны: без них слать уведомления некуда, поэтому фича молча
+     * отключается целиком (тот же приём, что у [atlassian] и [llm] — исключение здесь ловит
+     * ClaudeHooksService::createFromConfig()).
+     *
+     * @return array{settings_path: string, bot_token: string, chat_id: string, notification_text: string, stop_text: string}
+     */
+    public static function claudeNotifications(): array
+    {
+        $section = self::load()['claude'] ?? [];
+
+        $botToken = trim((string) ($section['telegram_bot_token'] ?? ''));
+        $chatId = trim((string) ($section['telegram_chat_id'] ?? ''));
+
+        if ($botToken === '' || $chatId === '') {
+            throw new RuntimeException(
+                'Уведомления Claude не настроены — заполните [claude] в config/params.ini'
+            );
+        }
+
+        return [
+            'settings_path' => self::stringOrDefault($section, 'settings_path', self::CLAUDE_DEFAULTS['settings_path']),
+            'bot_token' => $botToken,
+            'chat_id' => $chatId,
+            'notification_text' => self::stringOrDefault($section, 'notification_text', self::CLAUDE_DEFAULTS['notification_text']),
+            'stop_text' => self::stringOrDefault($section, 'stop_text', self::CLAUDE_DEFAULTS['stop_text']),
+        ];
     }
 
     /**

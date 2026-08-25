@@ -47,6 +47,7 @@ branch name and the PR description with an LLM, transitions the Jira status, log
   - [7. Stuck PRs metric — `[dashboard]`](#7-stuck-prs-metric--dashboard)
   - [8. Earnings — `[salary]`, `[currency]`, `[services]`](#8-earnings--salary-currency-services)
   - [9. Claude Code skill mode — `[mode]`](#9-claude-code-skill-mode--mode)
+  - [10. Claude Code notifications — `[claude]`](#10-claude-code-notifications--claude)
 - [Verify everything is up](#verify-everything-is-up)
 - [What you can leave unconfigured](#what-you-can-leave-unconfigured)
 - [Troubleshooting](#troubleshooting)
@@ -91,6 +92,11 @@ Independently of the checklist you also get: a back arrow in the top left corner
 link screen so you can open another task), a "time logged today" indicator, quick time logging
 with a single slider, a list of today's tasks, and a git commands dropdown next to the branch
 name (`checkout -b`, `push`, `rebase` onto your base branches).
+
+The gear icon in the top right opens the settings popover — the theme switch (Светлая/Тёмная),
+and, if `[claude]` is configured, a "Claude" section with a single "Уведомления" toggle that
+turns Claude Code desktop's Telegram notification hooks on and off (see
+[10. Claude Code notifications](#10-claude-code-notifications--claude)).
 
 The link screen also shows a small dashboard above the input field. For now it holds a single
 metric — "Зависшие PR > 24 ч" ("stuck PRs > 24 h"): how many of your Jira tasks have been sitting
@@ -499,6 +505,46 @@ ticks exactly as they were.
 
 ---
 
+### 10. Claude Code notifications — `[claude]`
+
+The gear icon → "Claude" section has a single "Уведомления" toggle. Turning it on writes a
+`hooks` block into Claude Code desktop's own `settings.json` (`Notification` and `Stop` events,
+each a `curl` call to the Telegram Bot API); turning it off removes the `hooks` key entirely,
+whatever it held before.
+
+```ini
+[claude]
+telegram_bot_token = "123456:AA...your-bot-token"
+telegram_chat_id = "000000000"
+notification_text = "🔔 Claude Code просит внимания!"
+stop_text = "✅ Claude Code завершил задачу!"
+```
+
+1. Create a bot with [@BotFather](https://t.me/BotFather) and copy its token.
+2. Get your numeric chat id, e.g. from [@userinfobot](https://t.me/userinfobot).
+3. Put both into `[claude]`. `notification_text`/`stop_text` are optional — the messages shown
+   above are the defaults.
+
+Not configured (`telegram_bot_token` or `telegram_chat_id` missing) — the "Claude" section simply
+doesn't show up in the settings popover.
+
+**This is the one feature that reaches outside the container onto your machine.** The toggle
+edits `~/.claude/settings.json` — the real settings file of the Claude Code desktop app running
+on your host, not a file inside the project. `docker-compose.yml` mounts it in as
+`/claude/settings.json` (via `${HOME}`, so it isn't tied to a particular username):
+
+```yaml
+volumes:
+  - ${HOME}/.claude/settings.json:/claude/settings.json
+```
+
+Only that one file is mounted, not the whole `~/.claude` directory (which also holds MCP tokens
+and session history the app has no business touching). If you don't want DevFlow to have write
+access to it at all, just leave `[claude]` unset and remove that line from `docker-compose.yml` —
+everything else keeps working.
+
+---
+
 ## Verify everything is up
 
 | What to check | How | Expected |
@@ -512,6 +558,7 @@ ticks exactly as they were.
 | The dashboard alert dot | Open a task while a metric is above zero | A small red dot on the back arrow in the top-left corner |
 | The LLM | Reach "Создать ветку в Git" → "Сгенерировать" | A branch name lands in the field |
 | GitHub CLI | `gh auth status` | `Logged in to github.com` |
+| Claude notifications | Gear icon → flip "Уведомления" on | `~/.claude/settings.json` on your host gets a `hooks` key with `Notification`/`Stop` curl commands |
 
 PHP logs when running under Docker: `docker compose logs -f app`.
 
@@ -524,6 +571,7 @@ PHP logs when running under Docker: `docker compose logs -f app`.
 | `[github]` | Reviewers in the `gh pr create` command | The command itself is still copied |
 | `[git]`, `[templates]`, `[docs]` | The `Rebase …` entries, project names and documentation links inside the copied texts | The texts are copied without those pieces |
 | `[worktime]`, `[dashboard]`, `[salary]`, `[currency]`, `[services]` | Nothing — the defaults kick in | Everything |
+| `[claude]` | The "Claude" section in the settings popover doesn't appear | Everything else |
 | No `params.ini` at all | Every integration | The checklist, the branch, copying texts, the progress bar |
 
 ## Troubleshooting
@@ -549,6 +597,8 @@ PHP logs when running under Docker: `docker compose logs -f app`.
 | The dashboard above the input field is missing | `[atlassian]` isn't configured or Jira is unreachable — there is nothing to count, so the block hides itself. Check the `myself` call above |
 | The stuck PRs counter stays at `0` with an old PR open | Days off are skipped, so the age is measured in working hours only: check `[worktime].non_working_days` and `[dashboard].stale_pull_request_hours`. Also make sure `pull_request_status` matches the status name in Jira exactly |
 | Time you just logged isn't in the list | The Jira Cloud search index updates with a delay — the app re-fetches the open task directly, the rest show up within a few seconds |
+| The "Claude" section is missing from settings | `[claude]` isn't configured (`telegram_bot_token`/`telegram_chat_id`) |
+| Toggling "Уведомления" fails with a write error | `${HOME}/.claude/settings.json` isn't mounted (check `docker-compose.yml`), the file doesn't exist yet on the host, or it isn't valid JSON |
 
 ## Project structure
 
