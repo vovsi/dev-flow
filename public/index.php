@@ -58,6 +58,14 @@ $assetVersion = static function (string $relativePath): string {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <title>DevFlow</title>
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=<?= $assetVersion('assets/favicon.svg') ?>">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=<?= $assetVersion('assets/favicon-32.png') ?>">
+    <link rel="apple-touch-icon" href="assets/icons/icon-192.png?v=<?= $assetVersion('assets/icons/icon-192.png') ?>">
+    <!-- Манифест с PNG-иконками — не для офлайн-режима (его тут нет и не нужно), а чтобы
+         Chrome при установке приложения на Mac (chrome://apps → Install) брал растровую иконку
+         из manifest.icons, а не генерировал собственную заглушку из первой буквы названия
+         (SVG-фавикон для этого шага Chrome не рассматривает) -->
+    <link rel="manifest" href="manifest.json?v=<?= $assetVersion('manifest.json') ?>">
     <link rel="stylesheet" href="assets/css/style.css?v=<?= $assetVersion('assets/css/style.css') ?>">
 </head>
 <body>

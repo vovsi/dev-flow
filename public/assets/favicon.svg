@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+    <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#4dabff"/>
+            <stop offset="1" stop-color="#0a6ee0"/>
+        </linearGradient>
+        <clipPath id="tile">
+            <rect x="4" y="4" width="120" height="120" rx="27"/>
+        </clipPath>
+    </defs>
+
+    <rect x="4" y="4" width="120" height="120" rx="27" fill="url(#bg)"/>
+
+    <!-- лёгкий блик стекла сверху, в духе macOS Tahoe -->
+    <g clip-path="url(#tile)">
+        <ellipse cx="64" cy="26" rx="56" ry="30" fill="#ffffff" opacity="0.14"/>
+    </g>
+
+    <!-- выполненный пункт чек-листа: один плоский белый глиф, без вложенных фигур -->
+    <path d="M38 64 L56 82 L93 42" fill="none" stroke="#ffffff" stroke-width="13"
+          stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
