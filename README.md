@@ -32,6 +32,7 @@ branch name and the PR description with an LLM, transitions the Jira status, log
 
 - [What it is and how it works](#what-it-is-and-how-it-works)
 - [Checklist steps](#checklist-steps)
+- [Claude Code skill mode (per task)](#claude-code-skill-mode-per-task)
 - [What you need to install](#what-you-need-to-install)
 - [Quick start in 5 minutes](#quick-start-in-5-minutes)
 - [Open it in a standalone 500×500 window](#open-it-in-a-standalone-500500-window)
@@ -46,8 +47,7 @@ branch name and the PR description with an LLM, transitions the Jira status, log
   - [6. Work day — `[worktime]`](#6-work-day--worktime)
   - [7. Stuck PRs metric — `[dashboard]`](#7-stuck-prs-metric--dashboard)
   - [8. Earnings — `[salary]`, `[currency]`, `[services]`](#8-earnings--salary-currency-services)
-  - [9. Claude Code skill mode — `[mode]`](#9-claude-code-skill-mode--mode)
-  - [10. Claude Code notifications — `[claude]`](#10-claude-code-notifications--claude)
+  - [9. Claude Code notifications — `[claude]`](#9-claude-code-notifications--claude)
 - [Verify everything is up](#verify-everything-is-up)
 - [What you can leave unconfigured](#what-you-can-leave-unconfigured)
 - [Troubleshooting](#troubleshooting)
@@ -88,15 +88,30 @@ database is just a file next to the code.
 | Затрекать время *(log time)* | A slider spanning your whole work day (lunch excluded) → adds a worklog to Jira. When you hit your daily norm, a congrats modal shows today's earnings and a motivational quote | Jira |
 | PR отправлен ревьюверу *(the PR was sent to a reviewer)* | Just a tick | — |
 
+## Claude Code skill mode (per task)
+
+Every task carries its own `claude_code_skill_mode` flag (`tasks.claude_code_skill_mode` in the
+database) — **on by default**. While it's on, `Закоммитить код`, `Создать PR`, `Проверить PR
+Claude Code` and `Указать описание PR` are hidden from the table above, and a single
+`Закоммитить изменения` *(commit the changes)* item appears instead right after `Создать ветку
+в Git`, with a `/commit` command for a Claude Code skill that's assumed to handle the commit,
+the PR, its description and the review for you.
+
+Turn it off for a task you're doing by hand — open the task, click the gear icon, and flip the
+"Claude Code Skill" switch in the "Эта задача" *(this task)* section of the settings popover.
+It's per task, not global: some tasks can run through the skill while others don't. Switching it
+back on never loses progress — the full checklist's ticks are exactly as you left them.
+
 Independently of the checklist you also get: a back arrow in the top left corner (returns to the
 link screen so you can open another task), a "time logged today" indicator, quick time logging
 with a single slider, a list of today's tasks, and a git commands dropdown next to the branch
 name (`checkout -b`, `push`, `rebase` onto your base branches).
 
-The gear icon in the top right opens the settings popover — the theme switch (Светлая/Тёмная),
-and, if `[claude]` is configured, a "Claude" section with a single "Уведомления" toggle that
-turns Claude Code desktop's Telegram notification hooks on and off (see
-[10. Claude Code notifications](#10-claude-code-notifications--claude)).
+The gear icon in the top right opens the settings popover — the theme switch (Светлая/Тёмная); an
+"Эта задача" *(this task)* section, shown only while a task is open, with the "Claude Code Skill"
+switch described [above](#claude-code-skill-mode-per-task); and, if `[claude]` is configured, a
+"Claude" section with a single "Уведомления" toggle that turns Claude Code desktop's Telegram
+notification hooks on and off (see [9. Claude Code notifications](#9-claude-code-notifications--claude)).
 
 The link screen also shows a small dashboard above the input field. For now it holds a single
 metric — "Зависшие PR > 24 ч" ("stuck PRs > 24 h"): how many of your Jira tasks have been sitting
@@ -487,25 +502,7 @@ keys**. If the rate can't be fetched, the earnings line is simply omitted from t
 
 ---
 
-### 9. Claude Code skill mode — `[mode]`
-
-If a Claude Code skill already does the commit, the PR, the review and the PR description for
-you, those checklist items are just noise. One switch hides them and adds a "Закоммитить
-изменения" ("commit the changes") item with the `/commit` command instead:
-
-```ini
-[mode]
-claude_code_skill_mode = "1"
-```
-
-`1` hides `code_written`, `pull_request`, `claude_review`, `pr_description` and shows
-`skill_commit`. `0`, a missing key or a missing `params.ini` — the full checklist.
-**Nothing is deleted from the database**: switch the mode off and the items come back with their
-ticks exactly as they were.
-
----
-
-### 10. Claude Code notifications — `[claude]`
+### 9. Claude Code notifications — `[claude]`
 
 The gear icon → "Claude" section has a single "Уведомления" toggle. Turning it on writes a
 `hooks` block into Claude Code desktop's own `settings.json` (`Notification` and `Stop` events,

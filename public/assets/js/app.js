@@ -20,7 +20,7 @@
     }
 
     /** Команда скилла Claude Code, который делает коммит за разработчика (пункт `skill_commit`,
-     * виден только при включённом [mode].claude_code_skill_mode) */
+     * виден только при включённом у задачи флаге claude_code_skill_mode — настройки → «Эта задача») */
     const SKILL_COMMIT_COMMAND = '/commit';
 
     const JIRA_DESCRIPTION_HTML =
@@ -271,6 +271,8 @@
     const todayTasksBtn = document.getElementById('today-tasks-btn');
     const settingsBtn = document.getElementById('settings-btn');
     const themePopover = document.getElementById('theme-popover');
+    const taskSettingsSection = document.getElementById('task-settings-section');
+    const taskSkillModeToggle = document.getElementById('task-skill-mode-toggle');
     const claudeSettingsSection = document.getElementById('claude-settings-section');
     const claudeNotificationsToggle = document.getElementById('claude-notifications-toggle');
     const toastEl = document.getElementById('toast');
@@ -470,11 +472,16 @@
     }
 
     /** Есть ли пункт с таким code в чек-листе текущей задачи. Единственный источник правды о
-     * составе чек-листа — ответ API (скрытые режимом [mode].claude_code_skill_mode пункты
+     * составе чек-листа — ответ API (пункты, скрытые флагом задачи claude_code_skill_mode,
      * отфильтровывает ChecklistRepository), поэтому список скрытых пунктов на фронте не
      * дублируется — зависимости между пунктами проверяются через эту функцию */
     function hasChecklistItem(code) {
         return state.checklist.some((entry) => entry.code === code);
+    }
+
+    /** tasks.claude_code_skill_mode приходит из SQLite как 0/1 — приводим к JS-булеву */
+    function isClaudeCodeSkillModeEnabled(task) {
+        return Boolean(Number(task.claude_code_skill_mode));
     }
 
     /** Описание, введённое в пункте «Закоммитить код» — подставляется в поле пункта «Указать
@@ -802,6 +809,46 @@
         });
     });
 
+    // ==================== Claude Code Skill для текущей задачи (раздел «Эта задача») ====================
+
+    /**
+     * Показывает/скрывает раздел «Эта задача» в настройках и синхронизирует тумблер с
+     * state.task — в отличие от раздела «Claude» ниже, это не общая настройка приложения,
+     * а флаг конкретной задачи (tasks.claude_code_skill_mode), поэтому раздел виден только
+     * пока задача открыта.
+     */
+    function updateTaskSettingsSection() {
+        if (!state.task) {
+            taskSettingsSection.classList.add('hidden');
+            return;
+        }
+        taskSkillModeToggle.checked = isClaudeCodeSkillModeEnabled(state.task);
+        taskSettingsSection.classList.remove('hidden');
+    }
+
+    // Пишет только в SQLite (без внешнего сервиса) — запрос быстрый, отдельная индикация
+    // загрузки не нужна (см. правило в CLAUDE.md), тот же приём, что у claudeNotificationsToggle
+    taskSkillModeToggle.addEventListener('change', async () => {
+        const enabled = taskSkillModeToggle.checked;
+        taskSkillModeToggle.disabled = true;
+        try {
+            const data = await apiCall('../api/toggle_claude_code_skill_mode.php', {
+                task_id: state.task.id,
+                enabled,
+            });
+            state.task = data.task;
+            state.checklist = data.checklist;
+            taskSkillModeToggle.checked = isClaudeCodeSkillModeEnabled(state.task);
+            renderChecklist();
+            showToast(enabled ? 'Claude Code Skill включён для этой задачи' : 'Claude Code Skill выключен для этой задачи');
+        } catch (e) {
+            taskSkillModeToggle.checked = !enabled; // откатываем визуально
+            showToast(e.message || 'Не удалось изменить настройку задачи');
+        } finally {
+            taskSkillModeToggle.disabled = false;
+        }
+    });
+
     // ==================== Уведомления Claude Code (раздел «Claude» в настройках) ====================
 
     /**
@@ -1001,6 +1048,7 @@
         renderChecklist();
         changeTaskBtn.classList.remove('hidden'); // возврат к вводу ссылки есть только внутри задачи
         updateTrackTimeAvailability(); // быстрый трек времени доступен только внутри задачи
+        updateTaskSettingsSection(); // раздел «Эта задача» в настройках тоже только внутри задачи
     }
 
     function showLinkScreen() {
@@ -1014,6 +1062,7 @@
         renderRecentTasks();
         changeTaskBtn.classList.add('hidden');
         updateTrackTimeAvailability();
+        updateTaskSettingsSection();
     }
 
     // ==================== Последние открытые задачи (экран ввода ссылки) ====================

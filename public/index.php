@@ -118,6 +118,21 @@ $assetVersion = static function (string $relativePath): string {
 <div id="theme-popover" class="popover popover--theme hidden">
     <button class="theme-option" data-theme="light">Светлая</button>
     <button class="theme-option" data-theme="dark">Тёмная</button>
+    <!-- Настройка в рамках текущей задачи (не общая для приложения) — показывается только
+         пока задача открыта, см. updateTaskSettingsSection() в app.js. Метка раздела
+         подсвечена акцентным цветом (.popover-label--task), чтобы отличаться от общих
+         разделов ниже -->
+    <div id="task-settings-section" class="popover-section hidden">
+        <div class="popover-divider"></div>
+        <div class="popover-label popover-label--task">Эта задача</div>
+        <label class="popover-toggle-row" data-tooltip="Пункты коммита, PR, ревью и описания PR делает скилл Claude Code — чек-лист их скрывает и показывает вместо них «Закоммитить изменения»">
+            <span>Claude Code Skill</span>
+            <span class="toggle-switch">
+                <input type="checkbox" id="task-skill-mode-toggle">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </span>
+        </label>
+    </div>
     <!-- Показывается только если в config/params.ini заполнена секция [claude]
          (см. api/get_claude_settings.php) — без неё слать уведомления некуда -->
     <div id="claude-settings-section" class="popover-section hidden">

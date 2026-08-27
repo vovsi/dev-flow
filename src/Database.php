@@ -116,6 +116,9 @@ final class Database
         if (!in_array('story_points_set', $columns, true)) {
             $pdo->exec('ALTER TABLE tasks ADD COLUMN story_points_set INTEGER NOT NULL DEFAULT 0');
         }
+        if (!in_array('claude_code_skill_mode', $columns, true)) {
+            $pdo->exec('ALTER TABLE tasks ADD COLUMN claude_code_skill_mode INTEGER NOT NULL DEFAULT 1');
+        }
     }
 
     /**

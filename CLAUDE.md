@@ -124,6 +124,7 @@ api/
   task.php                  — POST: найти/создать задачу (без сброса чек-листа для существующей)
   state.php                  — POST: read-only чтение текущего состояния задачи (без сброса)
   toggle.php                — POST: отметить пункт чек-листа
+  toggle_claude_code_skill_mode.php — POST: вкл/выкл режим Claude Code Skill для задачи
   finish.php                — POST: сбросить чек-лист («Завершить задачу»)
   delete_task.php            — POST: полностью удалить задачу и её чек-лист
   dashboard.php              — POST: read-only показатели дашборда (зависшие PR)
@@ -254,7 +255,8 @@ Dockerfile, docker-compose.yml — контейнерный запуск, вес
 ## База данных
 
 ```sql
-tasks(id, task_link UNIQUE, task_id, title, description, story_points_set, git_branch, stat)
+tasks(id, task_link UNIQUE, task_id, title, description, story_points_set, git_branch,
+      claude_code_skill_mode, stat)
 checklist(id, code UNIQUE, title, sort_order)
 task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id))
 ```
@@ -267,6 +269,13 @@ task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id)
   обновляется при каждой синхронизации — см. правило показа пункта `story_points` ниже.
 - `tasks.git_branch` — сохраняется независимо от чек-листа, показывается внизу экрана
   всегда, если задано (не зависит от состояния пункта «Создать ветку в Git»).
+- `tasks.claude_code_skill_mode` — режим «часть шагов делает скилл Claude Code» для этой
+  конкретной задачи, `1`/`0`, по умолчанию `1` у каждой новой задачи (схема, не код —
+  `INSERT INTO tasks` не проставляет её явно). Переключается в настройках приложения (раздел
+  «Эта задача», виден только пока задача открыта) через `TaskRepository::updateClaudeCodeSkillMode()`
+  и `api/toggle_claude_code_skill_mode.php` — см. бизнес-правила ниже. Раньше был общей настройкой
+  `[mode].claude_code_skill_mode` в `config/params.ini`; теперь у каждой задачи своё значение,
+  и `Config` про этот режим ничего не знает.
 - `checklist.code` — единственный стабильный идентификатор смысла пункта, см. выше.
 - `checklist.sort_order` — порядок отображения; можно менять свободно.
 - `task_checklist.is_done` — состояние конкретного пункта у конкретной задачи.
@@ -350,11 +359,6 @@ task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id)
   база USD) и `quotes_url` (случайная цитата); дефолты — `Config::SERVICE_URL_DEFAULTS`.
   Сервисы с токенами живут в своих секциях (`[atlassian]`, `[llm]`) и сюда не переезжают.
 
-- **`[mode]`** — `claude_code_skill_mode` (`1`/`0`, по умолчанию `0`): режим, в котором часть
-  шагов делает скилл Claude Code, а соответствующие пункты чек-листа скрываются целиком
-  (`Config::claudeCodeSkillMode()` → `ChecklistRepository`, см. бизнес-правила). Единственный
-  геттер `Config`, который сам глотает отсутствие `params.ini` — чек-лист обязан работать и
-  без настроенных интеграций.
 - **`[claude]`** — тумблер «Уведомления» в разделе «Claude» настроек приложения (иконка
   шестерёнки). `telegram_bot_token`/`telegram_chat_id` обязательны — без них
   `Config::claudeNotifications()` бросает исключение, `ClaudeHooksService::createFromConfig()`
@@ -393,21 +397,27 @@ task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id)
   — HTTP 404 на саму задачу.
 - **Новая задача** (ссылка не найдена в БД) — чек-лист создаётся полностью пустым (все
   пункты не отмечены).
-- **Режим Claude Code Skill** (`[mode].claude_code_skill_mode` = `1`) — пункты из
-  `ChecklistRepository::CLAUDE_CODE_SKILL_MODE_HIDDEN_CODES` (сейчас `code_written`,
-  `pull_request`, `claude_review`, `pr_description` — эти шаги делает скилл Claude Code)
-  не попадают в ответ ни одного эндпоинта: фильтр в SQL `getStatusesForTask()` рядом с
-  `HIDE_IF_STORY_POINTS_ALREADY_SET_CODE`, поэтому они не показываются, не участвуют в
-  прогрессе и в очерёдности шагов. `0`, ключ не задан или нет самого `params.ini` — чек-лист
-  полный. **Отметки в `task_checklist` остаются в БД** — выключение режима возвращает пункты
-  вместе с уже проставленными галочками. Обратная сторона того же фильтра —
-  `CLAUDE_CODE_SKILL_MODE_ONLY_CODES` (сейчас `skill_commit`): эти пункты существуют только
-  при включённом режиме, при выключенном скрываются тем же условием. Именно поэтому пункты
-  **не удалены** из
+- **Режим Claude Code Skill — флаг конкретной задачи, не общий конфиг** (`tasks.claude_code_skill_mode`,
+  по умолчанию `1` у каждой новой задачи; переключается в настройках приложения, раздел «Эта
+  задача», видимый только пока задача открыта — `api/toggle_claude_code_skill_mode.php` →
+  `TaskRepository::updateClaudeCodeSkillMode()`). Раньше это была общая настройка
+  `[mode].claude_code_skill_mode` в `config/params.ini` — теперь у каждой задачи своё значение,
+  и часть задач можно вести через скилл, а часть — вручную, не переключая ничего глобально.
+  Пока флаг включён, пункты из `ChecklistRepository::CLAUDE_CODE_SKILL_MODE_HIDDEN_CODES`
+  (сейчас `code_written`, `pull_request`, `claude_review`, `pr_description` — эти шаги делает
+  скилл Claude Code) не попадают в ответ ни одного эндпоинта: фильтр — прямо в SQL
+  `getStatusesForTask()` по `t.claude_code_skill_mode` из уже присоединённой туда же таблицы
+  `tasks` (рядом с `HIDE_IF_STORY_POINTS_ALREADY_SET_CODE`), поэтому они не показываются, не
+  участвуют в прогрессе и в очерёдности шагов. **Отметки в `task_checklist` остаются в БД** —
+  выключение флага у задачи возвращает пункты вместе с уже проставленными галочками. Обратная
+  сторона того же фильтра — `CLAUDE_CODE_SKILL_MODE_ONLY_CODES` (сейчас `skill_commit`): эти
+  пункты существуют только пока флаг включён, при выключенном скрываются тем же условием.
+  Именно поэтому пункты **не удалены** из
   `Database::CHECKLIST_ITEMS`: удаление оттуда стирает и сам пункт, и все галочки задач
-  (`pruneRemovedItems`), то есть было бы необратимо. `ChecklistRepository` — единственный
-  репозиторий, читающий `Config` (`Config::claudeCodeSkillMode()`): режим спрашивается в одном
-  месте, а не прокидывается через конструктор в 13 эндпоинтов, где новый эндпоинт легко забыть.
+  (`pruneRemovedItems`), то есть было бы необратимо. Поскольку значение читается из той же
+  строки `tasks`, что уже присоединена в запросе, `ChecklistRepository` про этот режим ничего
+  не спрашивает у `Config` — фильтр целиком в SQL, никакого отдельного параметра метода
+  `getStatusesForTask()` для этого не потребовалось.
   Зависимости других пунктов от скрытых проверяются на фронте через `hasChecklistItem(code)`
   (`app.js`) — по составу чек-листа из ответа API, а не вторым списком скрытых пунктов (DRY):
   так у `jira_description` пропадает кнопка «Скопировать PR». Добавляя новую зависимость между
@@ -497,7 +507,7 @@ task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id)
 | `story_points` | Указать Story Points | Jira | Модалка выбора значения (`STORY_POINTS_OPTIONS`: 1/2/3/5/8/13, с описанием сложности для каждого) → «Подтвердить» отправляет `api/update_story_points.php` → отмечается только при успешном ответе Jira (тот же паттерн, что у `status_doing`/`status_pull_request`) |
 | `status_doing` | Перевести в статус Doing | Jira | Переводит задачу в Jira в статус из `config/params.ini` (`atlassian.doing_status`, по умолчанию «Doing») через `api/transition_doing.php` → отмечается только при успешном переходе в Jira (тот же паттерн, что у `status_pull_request`/`transition_pull_request.php`) |
 | `git_branch` | Создать ветку в Git | Git | Запросить название ветки (кнопка «Сгенерировать» предлагает вариант через `api/generate_branch_name.php` → `BranchNameService`, LLM по заголовку/описанию задачи из Jira) → скопировать → сохранить в `tasks.git_branch` → отметить. Если ветка уже сохранена — кнопка «Оставить текущую» отмечает пункт без изменения `tasks.git_branch` |
-| `skill_commit` | Закоммитить изменения | Claude | **Только при включённом `[mode].claude_code_skill_mode`** (см. `CLAUDE_CODE_SKILL_MODE_ONLY_CODES`). Кнопка «Скопировать /commit» (команда скилла — `SKILL_COMMIT_COMMAND` в `app.js`, копирование можно повторять): сам коммит, PR и его описание делает скилл, приложение только отдаёт команду в буфер. Ниже — необязательное поле «Инструкция выливки» и кнопка «Сгенерировать» (`api/generate_deploy_instruction.php` → `DeployInstructionService`), логика та же, что у `pr_description`: результат копируется в буфер сразу и показывается в теле окна с отдельной кнопкой повторного копирования, генерацию можно повторять. Инструкцию выливки скилл знать не может, а пункт `pr_description` в этом режиме скрыт — ввести её больше негде, поэтому она здесь; поле пустое — генерации нет, пункт отмечается как обычно → «Готово» отмечает пункт |
+| `skill_commit` | Закоммитить изменения | Claude | **Только пока у задачи включён `claude_code_skill_mode`** (настройки → «Эта задача», см. `CLAUDE_CODE_SKILL_MODE_ONLY_CODES`). Кнопка «Скопировать /commit» (команда скилла — `SKILL_COMMIT_COMMAND` в `app.js`, копирование можно повторять): сам коммит, PR и его описание делает скилл, приложение только отдаёт команду в буфер. Ниже — необязательное поле «Инструкция выливки» и кнопка «Сгенерировать» (`api/generate_deploy_instruction.php` → `DeployInstructionService`), логика та же, что у `pr_description`: результат копируется в буфер сразу и показывается в теле окна с отдельной кнопкой повторного копирования, генерацию можно повторять. Инструкцию выливки скилл знать не может, а пункт `pr_description` в этом режиме скрыт — ввести её больше негде, поэтому она здесь; поле пустое — генерации нет, пункт отмечается как обычно → «Готово» отмечает пункт |
 | `code_written` | Закоммитить код | PHP | Модалка с полем «Опишите что сделали» → кнопка «Сгенерировать Description» отправляет текст в `api/generate_commit_message.php` → `CommitMessageService` (LLM формирует **только первую строку** commit message: `#JIRA-KEY <type>: <описание до 80 символов>`, без ссылки на задачу, тела и футера — тело и ссылка теперь живут в описании PR, пункт `pr_description`) — результат копируется в буфер сразу и показывается в теле окна (генерацию можно повторять) → кнопка «Закоммитил и Запушил» отмечает пункт и сохраняет введённое описание в `sessionStorage` (`devflow_commit_description_<task.id>`) — его подставляет в своё поле пункт `pr_description`. Команда `git push origin <ветка>` к этому пункту не относится — она отдельно живёт в дропдауне git-команд у названия ветки (`GIT_ACTION_COMMANDS.push`, см. Frontend ниже) |
 | `pull_request` | Создать PR | GitHub | Шаг 1 — показать команду `gh pr create --draft ...` (ревьюверы из `config/params.ini`, `github.reviewers`, собирается в `buildGhPrCreateCommand()`) с кнопкой «Скопировать»; шаг 2 — запросить ссылку на созданный PR → сохранить в `sessionStorage` (читают пункты `claude_review`, `jira_description`) → отметить |
 | `claude_review` | Проверить PR Claude Code | Claude | Показать промпт для ревью (со ссылкой на PR из `sessionStorage`, шаг `pull_request`; блок «Важное исключение» про репозитории без миграций добавляется, только если они перечислены в `[templates].review_skip_migration_repos`; ссылки на внутреннюю документацию подставляются из `[docs]` через `reviewDocRef()` — не задано, пункт остаётся без ссылки), кнопка «Скопировать» в теле окна копирует без отметки (можно повторять) → «Готово» в панели действий отмечает |
@@ -699,6 +709,23 @@ activity-индикатор должен быть маленьким и неза
 `tasks.git_branch` до отметки пункта.
 
 Ответ: `{ "task": {...}, "checklist": [...] }`
+
+### `POST /api/toggle_claude_code_skill_mode.php` — переключить режим Claude Code Skill у задачи
+
+Запрос: `{ "task_id": 1, "enabled": true }`
+
+Логика: `TaskRepository::updateClaudeCodeSkillMode()` пишет флаг прямо в `tasks.claude_code_skill_mode`
+этой задачи и перечитывает её чек-лист — никакой бизнес-логики сверх записи в БД нет, поэтому
+`TaskService` не нужен (тот же случай, что у `api/toggle.php`, — репозитории напрямую). 422 —
+не передан `task_id`. Пункты, которые появляются/пропадают при переключении — см. бизнес-правило
+«Режим Claude Code Skill» выше.
+
+Ответ: `{ "task": {...}, "checklist": [...] }`
+
+Вызывается по переключению тумблера «Claude Code Skill» в разделе «Эта задача» настроек —
+без модалки, эндпоинт не ходит во внешний сервис (пишет только SQLite), поэтому без индикации
+загрузки (тот же паттерн, что у `api/toggle_claude_notifications.php`); при ошибке фронт
+откатывает тумблер визуально и показывает тост с текстом ошибки.
 
 ### `POST /api/finish.php` — «Завершить задачу»
 
@@ -1009,9 +1036,9 @@ HTML-комментарии-подсказки, скопировать чек-л
 
 Ответ: `{ "instruction": "### ❗ **ВАЖНО** ❗\n**Перед мерджем сделать следующее:**\n..." }`
 
-Вызывается кнопкой «Сгенерировать» внутри модалки пункта `skill_commit` — в режиме
-`[mode].claude_code_skill_mode` пункт `pr_description` скрыт, а описание PR пишет скилл, и
-блок инструкции выливки нужно получить отдельно, чтобы вставить его в PR руками.
+Вызывается кнопкой «Сгенерировать» внутри модалки пункта `skill_commit` — пока у задачи включён
+`claude_code_skill_mode`, пункт `pr_description` скрыт, а описание PR пишет скилл, и блок
+инструкции выливки нужно получить отдельно, чтобы вставить его в PR руками.
 
 ### `POST /api/generate_motivation_quote.php` — случайная мотивационная цитата
 
@@ -1231,17 +1258,25 @@ Read-only (`ClaudeHooksService::isEnabled()`): читает `settings.json` Clau
   - кнопка «Затрекать» заблокирована, пока добавлять нечего (`.btn:disabled`), после успеха —
     тост и `loadTodayTimeSpent()`.
 - Попап настроек (`#theme-popover`, открывается иконкой шестерёнки в правом верхнем углу) —
-  выбор темы (Светлая/Тёмная) и, если `[claude]` заполнена, раздел «Claude» под разделителем
-  (`.popover-divider`/`.popover-label`) с единственным тумблером «Уведомления»
-  (`#claude-notifications-toggle`, разметка `.toggle-switch` — общий iOS-стиль переключателя,
-  других тумблеров в приложении нет, новый заводи через тот же класс). Состояние подгружается
-  один раз при инициализации (`loadClaudeSettings()`, рядом с `loadDashboard()`), а не при
-  каждом открытии попапа — секция `#claude-settings-section` остаётся `hidden`, пока
-  `api/get_claude_settings.php` не ответит `available: true`; конфиг не заполнен — секция
-  скрыта навсегда, второго запроса при клике на шестерёнку нет. Переключение тумблера дёргает
-  `api/toggle_claude_notifications.php` напрямую (`change`, без модалки и без спиннера — см.
-  описание эндпоинта выше про отсутствие индикации), при ошибке тумблер откатывается визуально
-  и показывается тост с текстом ошибки из ответа API.
+  выбор темы (Светлая/Тёмная); раздел «Эта задача» под разделителем (`#task-settings-section`,
+  метка `.popover-label--task` подсвечена акцентным цветом — единственное визуальное отличие
+  от разделов ниже, чтобы не путать настройку конкретной задачи с общими настройками
+  приложения) с тумблером «Claude Code Skill» (`#task-skill-mode-toggle`); и, если `[claude]`
+  заполнена, раздел «Claude» под своим разделителем (`.popover-divider`/`.popover-label`) с
+  единственным тумблером «Уведомления» (`#claude-notifications-toggle`, разметка
+  `.toggle-switch` — общий iOS-стиль переключателя, новый тумблер заводи через тот же класс).
+  «Эта задача» **не общая настройка** — виден только пока открыта задача
+  (`updateTaskSettingsSection()`, вызывается из `showTaskScreen()`/`showLinkScreen()`), а
+  тумблер синхронизируется с `state.task.claude_code_skill_mode` при каждом заходе в задачу, а
+  не подгружается отдельным запросом (значение уже приходит в самом объекте задачи — см.
+  `api/toggle_claude_code_skill_mode.php`). Раздел «Claude», в отличие от него, — общая
+  настройка приложения: состояние подгружается один раз при инициализации
+  (`loadClaudeSettings()`, рядом с `loadDashboard()`), а не при каждом открытии попапа —
+  секция `#claude-settings-section` остаётся `hidden`, пока `api/get_claude_settings.php` не
+  ответит `available: true`; конфиг не заполнен — секция скрыта навсегда, второго запроса при
+  клике на шестерёнку нет. Оба тумблера переключаются одинаково — напрямую по `change`, без
+  модалки и без спиннера (см. описание эндпоинтов выше про отсутствие индикации), при ошибке
+  откатываются визуально и показывают тост с текстом ошибки из ответа API.
 - Дропдаун git-команд (`gitActionsBtn`/`gitActionsPopover`) — открывается по клику у названия
   ветки внизу экрана (виден только когда `tasks.git_branch` задан, см. `renderGitBranch()`),
   список команд не хранится в БД и не связан с чек-листом — карта `code → команда`

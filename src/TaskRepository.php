@@ -72,6 +72,17 @@ final class TaskRepository
         ]);
     }
 
+    /**
+     * Переключает режим Claude Code Skill для конкретной задачи (настройки → «Эта задача»,
+     * видна только пока задача открыта). Раньше был глобальным конфигом ([mode] в
+     * config/params.ini) — теперь у каждой задачи своё значение.
+     */
+    public function updateClaudeCodeSkillMode(int $taskId, bool $enabled): void
+    {
+        $stmt = $this->db->prepare('UPDATE tasks SET claude_code_skill_mode = :enabled WHERE id = :id');
+        $stmt->execute(['enabled' => $enabled ? 1 : 0, 'id' => $taskId]);
+    }
+
     public function delete(int $id): void
     {
         $stmt = $this->db->prepare('DELETE FROM tasks WHERE id = :id');

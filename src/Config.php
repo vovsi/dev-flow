@@ -403,25 +403,6 @@ final class Config
     }
 
     /**
-     * Режим «часть шагов делает скилл Claude Code» ([mode].claude_code_skill_mode = 1):
-     * пункты чек-листа, которые в этом режиме не нужны, скрываются целиком
-     * (список — ChecklistRepository::CLAUDE_CODE_SKILL_MODE_HIDDEN_CODES). 0, не задано или
-     * нет самого config/params.ini — режим выключен, чек-лист полный. Единственный геттер,
-     * который сам глотает отсутствие конфига: его зовёт ChecklistRepository, а чек-лист
-     * обязан работать и без настроенных интеграций.
-     */
-    public static function claudeCodeSkillMode(): bool
-    {
-        try {
-            $section = self::load()['mode'] ?? [];
-        } catch (RuntimeException) {
-            return false;
-        }
-
-        return trim((string) ($section['claude_code_skill_mode'] ?? '')) === '1';
-    }
-
-    /**
      * Настройки уведомлений Claude Code (раздел «Claude» в настройках приложения) —
      * тумблер собирает из них блок hooks в settings.json (см. ClaudeHooksService).
      * Токен и chat_id обязательны: без них слать уведомления некуда, поэтому фича молча

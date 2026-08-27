@@ -387,6 +387,12 @@ body {
     color: var(--text-secondary);
 }
 
+/* Раздел с настройками в рамках текущей задачи (#task-settings-section) — акцентный цвет
+   вместо серого, чтобы отличаться от общих (не привязанных к задаче) разделов попапа */
+.popover-label--task {
+    color: var(--accent);
+}
+
 .popover-toggle-row {
     display: flex;
     align-items: center;

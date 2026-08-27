@@ -123,15 +123,6 @@ label = "грн"
 exchange_rate_url = "https://open.er-api.com/v6/latest/USD"
 quotes_url = "https://zenquotes.io/api/random"
 
-; Режим «часть шагов делает скилл Claude Code»: 1 — пункты чек-листа, которые берёт на себя
-; скилл (закоммитить код, создать PR, ревью PR через Claude Code, описание PR), скрываются
-; целиком вместе со связанными кнопками копирования ссылки на PR, а вместо них после «Создать
-; ветку в Git» появляется пункт «Закоммитить изменения» с командой скилла /commit;
-; 0 или не задано — полный чек-лист без этого пункта. Отметки уже пройденных пунктов в БД не теряются: выключение режима возвращает их
-; как были. Полный список скрываемых пунктов — ChecklistRepository::CLAUDE_CODE_SKILL_MODE_HIDDEN_CODES.
-[mode]
-claude_code_skill_mode = "1"
-
 ; Уведомления Claude Code (десктопное приложение) в Telegram — тумблер в разделе «Claude»
 ; настроек DevFlow (иконка шестерёнки). Включение записывает в settings.json Claude Code блок
 ; hooks на события Notification/Stop (curl в Telegram), выключение — удаляет ключ hooks целиком
