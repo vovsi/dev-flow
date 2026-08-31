@@ -11,7 +11,7 @@ use App\TaskRepository;
  * @OA\Post(
  *     path="/dashboard",
  *     summary="Get dashboard metrics.",
- *     description="Read-only endpoint that returns numeric dashboard metrics. For now the only metric is issues stuck in the Pull request status for more than 24 working hours — days off from [worktime].non_working_days are skipped (with the task list behind the number).",
+ *     description="Read-only endpoint that returns numeric dashboard metrics: issues assigned to the current user stuck in the Pull request status and in the Blocked status for longer than their thresholds in working hours — days off from [worktime].non_working_days are skipped (with the task list behind every number).",
  *     @OA\RequestBody(
  *         required=false,
  *         description="No parameters",
@@ -34,6 +34,18 @@ use App\TaskRepository;
  *                      @OA\Property(property="title", type="string", example="Fix login bug"),
  *                      @OA\Property(property="status", type="string", example="Pull request"),
  *                      @OA\Property(property="link", type="string", example="https://example.atlassian.net/browse/PROJ-123")
+ *                  ))
+ *              ),
+ *              @OA\Property(property="stale_blocked", type="object",
+ *                  @OA\Property(property="count", type="integer", example=1),
+ *                  @OA\Property(property="hours", type="integer", example=24),
+ *                  @OA\Property(property="status", type="string", example="Blocked"),
+ *                  @OA\Property(property="non_working_weekdays", type="array", @OA\Items(type="integer"), example={6, 7}),
+ *                  @OA\Property(property="tasks", type="array", @OA\Items(
+ *                      @OA\Property(property="task_id", type="string", example="PROJ-124"),
+ *                      @OA\Property(property="title", type="string", example="Waiting for the payment provider"),
+ *                      @OA\Property(property="status", type="string", example="Blocked"),
+ *                      @OA\Property(property="link", type="string", example="https://example.atlassian.net/browse/PROJ-124")
  *                  ))
  *              )
  *          )

@@ -163,6 +163,10 @@ $assetVersion = static function (string $relativePath): string {
                         <span class="metric-value" id="metric-stale-pr-value"><span class="skeleton" aria-hidden="true"></span></span>
                         <span class="metric-label" id="metric-stale-pr-label"><span class="skeleton" aria-hidden="true"></span></span>
                     </button>
+                    <button type="button" id="metric-stale-blocked" class="metric metric--orange">
+                        <span class="metric-value" id="metric-stale-blocked-value"><span class="skeleton" aria-hidden="true"></span></span>
+                        <span class="metric-label" id="metric-stale-blocked-label"><span class="skeleton" aria-hidden="true"></span></span>
+                    </button>
                 </div>
                 <button type="button" id="dashboard-refresh" class="dashboard-refresh" aria-label="Обновить показатели">
                     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

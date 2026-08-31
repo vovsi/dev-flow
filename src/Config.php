@@ -27,6 +27,9 @@ final class Config
     /** Порог показателя «зависшие PR» по умолчанию, часов (см. stalePullRequestHours()) */
     public const STALE_PULL_REQUEST_HOURS_DEFAULT = 24;
 
+    /** Порог показателя «зависшие Blocked» по умолчанию, часов (см. staleBlockedHours()) */
+    public const STALE_BLOCKED_HOURS_DEFAULT = 24;
+
     /** Значения [salary] по умолчанию (см. salaryHourlyRateUsd()) */
     public const SALARY_DEFAULTS = [
         'monthly_usd' => 1500.0,
@@ -158,6 +161,15 @@ final class Config
         return $status !== '' ? $status : 'Pull request';
     }
 
+    /** Название статуса Jira, задачи в котором считает показатель дашборда «Blocked». Не задано в конфиге — по умолчанию "Blocked" */
+    public static function atlassianBlockedStatus(): string
+    {
+        $data = self::load();
+        $status = trim((string) ($data['atlassian']['blocked_status'] ?? ''));
+
+        return $status !== '' ? $status : 'Blocked';
+    }
+
     /**
      * Названия статусов Jira для перехода по пункту «Перевести в статус Doing», в порядке
      * приоритета — первый найденный в workflow задачи переход и будет использован. Формат —
@@ -258,6 +270,18 @@ final class Config
         $hours = (int) (self::load()['dashboard']['stale_pull_request_hours'] ?? 0);
 
         return $hours > 0 ? $hours : self::STALE_PULL_REQUEST_HOURS_DEFAULT;
+    }
+
+    /**
+     * То же для показателя «зависшие Blocked»: сколько часов задача может висеть в статусе
+     * [atlassian].blocked_status, прежде чем попасть в счётчик. Порог свой, а не общий с
+     * «зависшими PR» — заблокированная задача и висящий PR это разные по смыслу ожидания.
+     */
+    public static function staleBlockedHours(): int
+    {
+        $hours = (int) (self::load()['dashboard']['stale_blocked_hours'] ?? 0);
+
+        return $hours > 0 ? $hours : self::STALE_BLOCKED_HOURS_DEFAULT;
     }
 
     /** «sat» / «saturday» / «6» → 6 (ISO-8601), непонятное значение → null */

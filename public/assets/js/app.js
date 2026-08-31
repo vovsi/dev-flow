@@ -253,9 +253,6 @@
     const recentTasksListEl = document.getElementById('recent-tasks-list');
     const dashboardEl = document.getElementById('dashboard');
     const dashboardRefreshBtn = document.getElementById('dashboard-refresh');
-    const metricStalePrEl = document.getElementById('metric-stale-pr');
-    const metricStalePrValueEl = document.getElementById('metric-stale-pr-value');
-    const metricStalePrLabelEl = document.getElementById('metric-stale-pr-label');
     const taskIdLabel = document.getElementById('task-id-label');
     const changeTaskBtn = document.getElementById('change-task-btn');
     const checklistEl = document.getElementById('checklist');
@@ -2422,9 +2419,39 @@
 
     // ==================== Дашборд показателей (экран ввода ссылки) ====================
 
-    /** Последний полученный показатель «зависшие PR» — из него берётся список задач для
-     * модалки по клику, чтобы не дёргать Jira второй раз за теми же данными */
-    let stalePrMetric = null;
+    /**
+     * Показатели дашборда: карта `ключ ответа api/dashboard.php → как его показать`.
+     * Оба показателя считаются одинаково (задачи на мне, висящие в статусе дольше порога
+     * рабочих часов) и отличаются только id элементов, подписью и заголовком модалки —
+     * поэтому рендер, тултип и список задач у них общие. Новый показатель = ещё одна запись
+     * здесь плюс плитка в public/index.php, править код ниже не требуется.
+     */
+    const DASHBOARD_METRICS = [
+        {
+            key: 'stale_pull_requests',
+            id: 'metric-stale-pr',
+            // Подпись зависит от порога часов — он приходит с сервера, на фронте не зашит
+            label: (metric) => `Зависшие PR > ${metric.hours} ч`,
+            modalTitle: 'Зависшие PR',
+            modalIcon: '⏳',
+        },
+        {
+            key: 'stale_blocked',
+            id: 'metric-stale-blocked',
+            label: (metric) => `Blocked > ${metric.hours} ч`,
+            modalTitle: 'Зависшие Blocked',
+            modalIcon: '🚧',
+        },
+    ].map((view) => ({
+        ...view,
+        el: document.getElementById(view.id),
+        valueEl: document.getElementById(`${view.id}-value`),
+        labelEl: document.getElementById(`${view.id}-label`),
+        /** Последние полученные данные показателя — из них берётся список задач для модалки
+         * по клику, чтобы не дёргать Jira второй раз за теми же данными */
+        data: null,
+    }));
+
     let dashboardLoadedAt = 0;
     let dashboardLoading = false;
 
@@ -2459,16 +2486,19 @@
         dashboardLoadedAt = Date.now();
         dashboardEl.classList.remove('loading');
         updateDashboardAlert(data);
-        stalePrMetric = data.stale_pull_requests || null;
-        if (!stalePrMetric) return;
 
-        metricStalePrValueEl.textContent = String(stalePrMetric.count || 0);
-        // Порог, название статуса и нерабочие дни приходят с сервера (DashboardService,
-        // [atlassian]/[worktime] в конфиге) — на фронте их не зашиваем
-        metricStalePrLabelEl.textContent = `Зависшие PR > ${stalePrMetric.hours} ч`;
-        metricStalePrEl.dataset.tooltip =
-            `Задачи в статусе «${stalePrMetric.status}» дольше ${stalePrMetric.hours} ч`
-            + daysOffNote(stalePrMetric);
+        DASHBOARD_METRICS.forEach((view) => {
+            view.data = data[view.key] || null;
+            if (!view.data) return;
+
+            view.valueEl.textContent = String(view.data.count || 0);
+            // Порог, название статуса и нерабочие дни приходят с сервера (DashboardService,
+            // [atlassian]/[worktime]/[dashboard] в конфиге) — на фронте их не зашиваем
+            view.labelEl.textContent = view.label(view.data);
+            view.el.dataset.tooltip =
+                `Задачи в статусе «${view.data.status}» дольше ${view.data.hours} ч`
+                + daysOffNote(view.data);
+        });
     }
 
     /**
@@ -2499,6 +2529,8 @@
         loadDashboard();
     }
 
+    // Одна кнопка актуализации на весь блок — она перезапрашивает api/dashboard.php целиком,
+    // то есть все показатели сразу
     dashboardRefreshBtn.addEventListener('click', () => loadDashboard());
 
     // Давность обновления пересчитывается в момент наведения — как у индикатора времени
@@ -2509,21 +2541,23 @@
     });
 
     // Клик по показателю — список задач за числом, каждая строка ведёт на задачу в Jira
-    metricStalePrEl.addEventListener('click', async () => {
-        const tasks = (stalePrMetric && stalePrMetric.tasks) || [];
-        const hours = (stalePrMetric && stalePrMetric.hours) || 0;
-        const status = (stalePrMetric && stalePrMetric.status) || '';
+    DASHBOARD_METRICS.forEach((view) => {
+        view.el.addEventListener('click', async () => {
+            const tasks = (view.data && view.data.tasks) || [];
+            const hours = (view.data && view.data.hours) || 0;
+            const status = (view.data && view.data.status) || '';
 
-        const bodyHtml = '<div class="today-tasks-modal">' +
-            (tasks.length === 0
-                ? `<p class="today-tasks-empty">Нет задач, зависших в статусе «${escapeHtml(status)}» дольше ${hours} ч${escapeHtml(daysOffNote(stalePrMetric))}.</p>`
-                : taskListHtml(tasks, { withStatus: false, withTime: false })) +
-            '</div>';
+            const bodyHtml = '<div class="today-tasks-modal">' +
+                (tasks.length === 0
+                    ? `<p class="today-tasks-empty">Нет задач, зависших в статусе «${escapeHtml(status)}» дольше ${hours} ч${escapeHtml(daysOffNote(view.data))}.</p>`
+                    : taskListHtml(tasks, { withStatus: false, withTime: false })) +
+                '</div>';
 
-        const title = tasks.length === 0
-            ? 'Зависшие PR ⏳'
-            : `Зависшие PR: ${tasks.length} ⏳`;
-        await showModal(title, bodyHtml, [{ label: 'Закрыть', primary: true }]);
+            const title = tasks.length === 0
+                ? `${view.modalTitle} ${view.modalIcon}`
+                : `${view.modalTitle}: ${tasks.length} ${view.modalIcon}`;
+            await showModal(title, bodyHtml, [{ label: 'Закрыть', primary: true }]);
+        });
     });
 
     // ==================== Инициализация ====================

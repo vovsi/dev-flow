@@ -45,7 +45,7 @@ branch name and the PR description with an LLM, transitions the Jira status, log
   - [4. Git commands — `[git]`](#4-git-commands--git)
   - [5. Team-specific texts — `[templates]` and `[docs]`](#5-team-specific-texts--templates-and-docs)
   - [6. Work day — `[worktime]`](#6-work-day--worktime)
-  - [7. Stuck PRs metric — `[dashboard]`](#7-stuck-prs-metric--dashboard)
+  - [7. Dashboard metrics — `[dashboard]`](#7-dashboard-metrics--dashboard)
   - [8. Earnings — `[salary]`, `[currency]`, `[services]`](#8-earnings--salary-currency-services)
   - [9. Claude Code notifications — `[claude]`](#9-claude-code-notifications--claude)
 - [Verify everything is up](#verify-everything-is-up)
@@ -113,16 +113,22 @@ switch described [above](#claude-code-skill-mode-per-task); and, if `[claude]` i
 "Claude" section with a single "Уведомления" toggle that turns Claude Code desktop's Telegram
 notification hooks on and off (see [9. Claude Code notifications](#9-claude-code-notifications--claude)).
 
-The link screen also shows a small dashboard above the input field. For now it holds a single
-metric — "Зависшие PR > 24 ч" ("stuck PRs > 24 h"): how many of your Jira tasks have been sitting
-in the Pull request status (the one from `pull_request_status` in your config) for longer than the
-threshold from `[dashboard]`. **Days off don't count** — a PR moved on Friday at 17:00 only becomes
-"stuck" on Monday at 17:00, not on Saturday (the weekdays to skip live in
-`[worktime].non_working_days`). Click the tile to get the list of those tasks — each row links to
-Jira; hover the tile to see the status, the threshold and which days are skipped. The round
-button on the right refreshes the numbers; hover it to see how long ago they were fetched. Like
-the "time logged today" indicator, the numbers also refresh on their own whenever you come back
-to the window (at most once a minute), so a PR merged in another tab doesn't keep counting.
+The link screen also shows a small dashboard above the input field: two tiles side by side, both
+counting Jira tasks **assigned to you** that have been sitting in one status for longer than its
+threshold from `[dashboard]`.
+
+| Tile | Counts tasks in |
+|---|---|
+| "Зависшие PR > 24 ч" *(stuck PRs)*, blue | the Pull request status (`pull_request_status`) |
+| "Blocked > 24 ч", orange | the Blocked status (`blocked_status`) |
+
+**Days off don't count** — a PR moved on Friday at 17:00 only becomes "stuck" on Monday at 17:00,
+not on Saturday (the weekdays to skip live in `[worktime].non_working_days`). Click a tile to get
+the list of its tasks — each row links to Jira; hover the tile to see the status, the threshold
+and which days are skipped. The round button on the right refreshes **both** numbers at once;
+hover it to see how long ago they were fetched. Like the "time logged today" indicator, they also
+refresh on their own whenever you come back to the window (at most once a minute), so a PR merged
+in another tab doesn't keep counting.
 
 While a task is open the dashboard itself is off-screen, so a **red dot appears on the back arrow**
 (top-left, "Другая задача") whenever any dashboard metric is above zero. It follows the background
@@ -226,6 +232,7 @@ api_token = "ATATT3xFfGF0..."
 story_points_field = "customfield_10016"
 doing_status = "Doing"
 pull_request_status = "Pull request"
+blocked_status = "Blocked"
 ```
 
 **Where to get `api_token`** (this is not your account password — a password will not work):
@@ -263,6 +270,10 @@ curl -s -u "you@example.com:YOUR_TOKEN" \
 ```
 
 Use the `transitions[].name` (or `.to.name`) values. Defaults are `Doing` and `Pull request`.
+
+**`blocked_status`** — the status counted by the orange "Blocked" dashboard tile (see
+[7. Dashboard metrics](#7-dashboard-metrics--dashboard)). Nothing is ever transitioned into it,
+so it only has to match the **status** name in Jira, not a transition. Default is `Blocked`.
 
 > Without the `[atlassian]` section the app still works: tasks open without a title from Jira,
 > and the Jira-backed checklist items are simply ticked without any external action.
@@ -451,7 +462,7 @@ Optional — the defaults are shown above. The slider position is the time **up 
 is worked**; lunch is highlighted in orange and never logged. `daily_hours` is also the
 threshold that triggers the congrats modal.
 
-`non_working_days` is used by the "stuck PRs" dashboard metric: hours that fall on those days
+`non_working_days` is used by both dashboard metrics: hours that fall on those days
 are not counted, so a PR moved on Friday evening stays fine over the weekend. Write it as
 `"sat, sun"` (full names work too) or as ISO-8601 numbers `"6, 7"`, where 1 is Monday and 7 is
 Sunday. Leave the key out and Saturday + Sunday are used; set it to an empty string and every
@@ -459,19 +470,24 @@ day counts. Listing all seven days is ignored — otherwise nothing would ever b
 
 ---
 
-### 7. Stuck PRs metric — `[dashboard]`
+### 7. Dashboard metrics — `[dashboard]`
 
-How long a task may sit in the Pull request status before it lands in the dashboard counter on
-the link screen.
+How long a task may sit in a status before it lands in one of the two dashboard counters on the
+link screen.
 
 ```ini
 [dashboard]
 stale_pull_request_hours = 24
+stale_blocked_hours = 24
 ```
 
-Optional — 24 by default. Only working hours count: the weekdays from
-`[worktime].non_working_days` are skipped entirely. The number is also what the tile's label
-shows ("Зависшие PR > 24 ч"), so changing it here changes the interface too.
+Optional — 24 by default for both. Each metric has its own threshold: a blocked task and a
+hanging PR are different kinds of waiting. Only working hours count: the weekdays from
+`[worktime].non_working_days` are skipped entirely. The numbers are also what the tile labels
+show ("Зависшие PR > 24 ч", "Blocked > 24 ч"), so changing them here changes the interface too.
+
+The status names themselves come from `[atlassian]` — `pull_request_status` and `blocked_status`
+(see [1. Jira](#1-jira--atlassian)); they must match the status names in your Jira exactly.
 
 ---
 
@@ -551,7 +567,7 @@ everything else keeps working.
 | Secrets are not exposed | `curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/config/params.ini` | `404` — the router serves nothing but `public/` and `api/` |
 | Jira | Paste a link to a real task | The task key shows up on top, the checklist renders; the "time logged today" indicator appears in the top left |
 | Jira (token) | `curl -s -u "email:token" "https://your-domain.atlassian.net/rest/api/2/myself"` | JSON with your account, not a `401` |
-| The dashboard | Look above the "task link" field | The blue "Зависшие PR > 24 ч" tile with a number; clicking it opens the task list |
+| The dashboard | Look above the "task link" field | Two tiles with numbers — the blue "Зависшие PR > 24 ч" and the orange "Blocked > 24 ч"; clicking either opens its task list |
 | The dashboard alert dot | Open a task while a metric is above zero | A small red dot on the back arrow in the top-left corner |
 | The LLM | Reach "Создать ветку в Git" → "Сгенерировать" | A branch name lands in the field |
 | GitHub CLI | `gh auth status` | `Logged in to github.com` |
@@ -563,7 +579,7 @@ PHP logs when running under Docker: `docker compose logs -f app`.
 
 | Not configured | What stops working | What keeps working |
 |---|---|---|
-| `[atlassian]` | Task title from Jira, Story Points, status transitions, time logging, the time indicator, the dashboard on the link screen | The whole checklist as a manual tracker, branches, copying texts |
+| `[atlassian]` | Task title from Jira, Story Points, status transitions, time logging, the time indicator, both dashboard metrics on the link screen | The whole checklist as a manual tracker, branches, copying texts |
 | `[llm]` | The "Сгенерировать" ("Generate") buttons (branch, commit message, PR description); the quote stays in English | Everything else; you can type the texts by hand |
 | `[github]` | Reviewers in the `gh pr create` command | The command itself is still copied |
 | `[git]`, `[templates]`, `[docs]` | The `Rebase …` entries, project names and documentation links inside the copied texts | The texts are copied without those pieces |
@@ -592,7 +608,7 @@ PHP logs when running under Docker: `docker compose logs -f app`.
 | Claude: `credit balance is too low` | Empty balance at platform.claude.com → Billing |
 | Code changes don't show up | Aggressive browser caching. Static assets are versioned by mtime automatically; under Docker run `docker compose restart` after editing |
 | The dashboard above the input field is missing | `[atlassian]` isn't configured or Jira is unreachable — there is nothing to count, so the block hides itself. Check the `myself` call above |
-| The stuck PRs counter stays at `0` with an old PR open | Days off are skipped, so the age is measured in working hours only: check `[worktime].non_working_days` and `[dashboard].stale_pull_request_hours`. Also make sure `pull_request_status` matches the status name in Jira exactly |
+| A dashboard counter stays at `0` with an old task in that status | Days off are skipped, so the age is measured in working hours only: check `[worktime].non_working_days` and `[dashboard].stale_pull_request_hours` / `stale_blocked_hours`. Also make sure `pull_request_status` / `blocked_status` match the status names in Jira exactly |
 | Time you just logged isn't in the list | The Jira Cloud search index updates with a delay — the app re-fetches the open task directly, the rest show up within a few seconds |
 | The "Claude" section is missing from settings | `[claude]` isn't configured (`telegram_bot_token`/`telegram_chat_id`) |
 | Toggling "Уведомления" fails with a write error | `${HOME}/.claude/settings.json` isn't mounted (check `docker-compose.yml`), the file doesn't exist yet on the host, or it isn't valid JSON |
