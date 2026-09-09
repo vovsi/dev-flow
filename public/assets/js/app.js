@@ -13,6 +13,13 @@
      * ([docs] в config/params.ini). Ключ не задан — ссылка в промпт не подставляется */
     const REVIEW_DOC_LINKS = (window.DEVFLOW_CONFIG && window.DEVFLOW_CONFIG.reviewDocLinks) || {};
 
+    /**
+     * Строгая очерёдность пунктов чек-листа ([checklist].strict_order в config/params.ini).
+     * Выключена — свободный список: в списке видны и уже выполненные пункты, нажать можно
+     * любой, а кнопка «Перейти сюда» не нужна и не показывается.
+     */
+    const STRICT_ORDER = !(window.DEVFLOW_CONFIG && window.DEVFLOW_CONFIG.checklistStrictOrder === false);
+
     /** Хвост « См.: <url>» для пункта промпта ревью, если ссылка на документацию задана в конфиге */
     function reviewDocRef(key) {
         const url = REVIEW_DOC_LINKS[key];
@@ -925,13 +932,14 @@
     }
 
     /**
-     * Рендерит чек-лист. Выполненные пункты в списке не показываются — они уже улетели по
-     * анимации. Работаем строго по очереди: активен и доступен для клика только первый
+     * Рендерит чек-лист. При строгой очерёдности (STRICT_ORDER) выполненные пункты в списке не
+     * показываются — они уже улетели по анимации, а активен и доступен для клика только первый
      * невыполненный пункт, остальные заблокированы (updateLockState расставляет классы).
+     * В свободном списке рисуются все пункты задачи, выполненные — с галочкой и без блокировок.
      */
     function renderChecklist() {
         checklistEl.innerHTML = '';
-        const pending = state.checklist.filter((item) => !item.is_done);
+        const pending = STRICT_ORDER ? state.checklist.filter((item) => !item.is_done) : state.checklist;
 
         if (pending.length === 0) {
             checklistEl.innerHTML =
@@ -949,6 +957,9 @@
             const li = document.createElement('li');
             li.className = 'checklist-item';
             li.dataset.checklistId = String(item.id);
+            if (item.is_done) {
+                li.classList.add('done'); // свободный список: выполненный пункт остаётся видимым
+            }
             if (service) {
                 li.style.setProperty('--service-color', service.color);
             }
@@ -960,29 +971,34 @@
                 `<span class="item-title">${escapeHtml(item.title)}${modalHint}</span>` +
                 (service ? `<span class="service-icon" style="color: ${service.color}">${service.svg}</span>` : '') +
                 `<span class="item-spinner">${spinnerHtml()}</span>` +
-                `<button type="button" class="jump-here-btn">Перейти сюда</button>`;
+                // В свободном списке очерёдности нет, перескакивать через пункты не нужно
+                (STRICT_ORDER ? `<button type="button" class="jump-here-btn">Перейти сюда</button>` : '');
             li.addEventListener('click', () => {
                 // 'done' — на случай повторного клика в ~0.5с окне до улёта пункта: сама li уже
                 // отмечена выполненной, но замыкание ниже всё ещё держит старый объект item
                 // (state.checklist был заменён новым массивом после markDone), поэтому проверка
                 // item.is_done внутри handleItemClick тут не сработает — нужна проверка по DOM.
-                if (li.classList.contains('locked') || li.classList.contains('done') || li.classList.contains('loading')) return;
+                // В свободном списке выполненный пункт кликабелен: его можно пройти заново.
+                if (li.classList.contains('locked') || li.classList.contains('loading')) return;
+                if (STRICT_ORDER && li.classList.contains('done')) return;
                 handleItemClick(item);
             });
-            li.querySelector('.jump-here-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                jumpToItem(item);
-            });
+            if (STRICT_ORDER) {
+                li.querySelector('.jump-here-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    jumpToItem(item);
+                });
+            }
             checklistEl.appendChild(li);
         });
         updateLockState();
         renderProgress();
     }
 
-    /** Только первый оставшийся пункт активен, все следующие — заблокированы */
+    /** Только первый оставшийся пункт активен, все следующие — заблокированы (в свободном списке блокировок нет) */
     function updateLockState() {
         checklistEl.querySelectorAll('.checklist-item').forEach((li, index) => {
-            li.classList.toggle('locked', index !== 0);
+            li.classList.toggle('locked', STRICT_ORDER && index !== 0);
         });
     }
 
@@ -998,6 +1014,14 @@
         }
 
         li.classList.add('done');
+
+        // Свободный список: пункт остаётся на месте с галочкой, улетать некуда. Список всё
+        // равно перерисовывается — состав мог измениться (story_points после отметки выпадает
+        // из ответа API), но с той же паузой, чтобы галочку успели увидеть.
+        if (!STRICT_ORDER) {
+            setTimeout(renderChecklist, 550);
+            return;
+        }
 
         setTimeout(() => {
             const height = li.getBoundingClientRect().height;
@@ -1844,7 +1868,9 @@
     };
 
     function handleItemClick(item) {
-        if (item.is_done) {
+        // Свободный список: выполненный пункт можно пройти заново (в строгом режиме он к этому
+        // моменту уже улетел из списка)
+        if (STRICT_ORDER && item.is_done) {
             return;
         }
         const handler = ITEM_HANDLERS[item.code];

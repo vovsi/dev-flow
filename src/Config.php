@@ -24,6 +24,12 @@ final class Config
      */
     public const NON_WORKING_WEEKDAYS_DEFAULT = [6, 7];
 
+    /**
+     * Строгая очерёдность пунктов чек-листа по умолчанию (см. checklistStrictOrder()) —
+     * включена: активен только первый невыполненный пункт.
+     */
+    public const CHECKLIST_STRICT_ORDER_DEFAULT = true;
+
     /** Порог показателя «зависшие PR» по умолчанию, часов (см. stalePullRequestHours()) */
     public const STALE_PULL_REQUEST_HOURS_DEFAULT = 24;
 
@@ -394,6 +400,23 @@ final class Config
         }
 
         return $targets;
+    }
+
+    /**
+     * Строгая очерёдность пунктов чек-листа ([checklist].strict_order). Включена (по
+     * умолчанию) — активен только первый невыполненный пункт, выполненные из списка уходят.
+     * Выключена — свободный список: видны все пункты задачи и нажать можно любой.
+     */
+    public static function checklistStrictOrder(): bool
+    {
+        $value = trim((string) ((self::load()['checklist'] ?? [])['strict_order'] ?? ''));
+        if ($value === '') {
+            return self::CHECKLIST_STRICT_ORDER_DEFAULT;
+        }
+
+        // Строгий порядок отключается только явным «нулевым» значением — опечатка в ключе
+        // не должна молча ломать основной режим работы чек-листа.
+        return !in_array(strtolower($value), ['0', 'false', 'no', 'off'], true);
     }
 
     /**

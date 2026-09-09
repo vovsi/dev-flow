@@ -43,11 +43,12 @@ branch name and the PR description with an LLM, transitions the Jira status, log
     - [Option B: LM Studio (local, free)](#option-b-lm-studio-local-free)
   - [3. GitHub CLI — `[github]`](#3-github-cli--github)
   - [4. Git commands — `[git]`](#4-git-commands--git)
-  - [5. Team-specific texts — `[templates]` and `[docs]`](#5-team-specific-texts--templates-and-docs)
-  - [6. Work day — `[worktime]`](#6-work-day--worktime)
-  - [7. Dashboard metrics — `[dashboard]`](#7-dashboard-metrics--dashboard)
-  - [8. Earnings — `[salary]`, `[currency]`, `[services]`](#8-earnings--salary-currency-services)
-  - [9. Claude Code notifications — `[claude]`](#9-claude-code-notifications--claude)
+  - [5. Checklist order — `[checklist]`](#5-checklist-order--checklist)
+  - [6. Team-specific texts — `[templates]` and `[docs]`](#6-team-specific-texts--templates-and-docs)
+  - [7. Work day — `[worktime]`](#7-work-day--worktime)
+  - [8. Dashboard metrics — `[dashboard]`](#8-dashboard-metrics--dashboard)
+  - [9. Earnings — `[salary]`, `[currency]`, `[services]`](#9-earnings--salary-currency-services)
+  - [10. Claude Code notifications — `[claude]`](#10-claude-code-notifications--claude)
 - [Verify everything is up](#verify-everything-is-up)
 - [What you can leave unconfigured](#what-you-can-leave-unconfigured)
 - [Troubleshooting](#troubleshooting)
@@ -66,7 +67,9 @@ database is just a file next to the code.
 2. The app checks that the task exists, pulls its title and description from Jira and creates
    (or finds) a checklist for it in its own database.
 3. Then you work top to bottom: only the first unfinished item is unlocked. A completed item
-   slides out of the list and the progress bar grows.
+   slides out of the list and the progress bar grows. Prefer picking steps in any order? Set
+   `strict_order = 0` in [`[checklist]`](#5-checklist-order--checklist) and the list becomes
+   free: all items stay visible and any of them is clickable.
 4. Reopening the same task does **not** reset your ticks — it only refreshes the data from Jira.
    To reset the checklist use the "Начать заново" ("Start over") button; to delete the task
    entirely use the trash icon in the recent tasks list on the link screen.
@@ -421,7 +424,27 @@ base branch goes into the `git rebase origin/<base>` command. Not set — the dr
 
 ---
 
-### 5. Team-specific texts — `[templates]` and `[docs]`
+### 5. Checklist order — `[checklist]`
+
+How you walk through the checklist items of a task.
+
+```ini
+[checklist]
+strict_order = 1
+```
+
+`strict_order = 1` (the default) — one step at a time: only the first unfinished item is
+active, the rest are dimmed and not clickable, a finished item flies out of the list, and
+`Перейти сюда` *(jump here)* on a locked item ticks off everything above it so you can skip
+ahead.
+
+`strict_order = 0` — a free list: every item of the task stays visible, finished ones keep
+their green tick, and you can click any of them at any moment (there is nothing to skip, so
+the `Перейти сюда` button is not shown). Clicking a finished item runs its step again.
+
+---
+
+### 6. Team-specific texts — `[templates]` and `[docs]`
 
 The pieces of the copied texts that differ from team to team:
 
@@ -443,7 +466,7 @@ api_data_format = "https://your-domain.atlassian.net/wiki/spaces/DevTeam/pages/0
 
 ---
 
-### 6. Work day — `[worktime]`
+### 7. Work day — `[worktime]`
 
 Configures the time-logging slider (its bounds, the lunch break and your daily hours norm) and
 which weekdays are days off.
@@ -470,7 +493,7 @@ day counts. Listing all seven days is ignored — otherwise nothing would ever b
 
 ---
 
-### 7. Dashboard metrics — `[dashboard]`
+### 8. Dashboard metrics — `[dashboard]`
 
 How long a task may sit in a status before it lands in one of the two dashboard counters on the
 link screen.
@@ -491,7 +514,7 @@ The status names themselves come from `[atlassian]` — `pull_request_status` an
 
 ---
 
-### 8. Earnings — `[salary]`, `[currency]`, `[services]`
+### 9. Earnings — `[salary]`, `[currency]`, `[services]`
 
 The first time log of the day that brings today's total up to `[worktime].daily_hours` opens a
 congrats modal: how much you earned today, plus a motivational quote.
@@ -518,7 +541,7 @@ keys**. If the rate can't be fetched, the earnings line is simply omitted from t
 
 ---
 
-### 9. Claude Code notifications — `[claude]`
+### 10. Claude Code notifications — `[claude]`
 
 The gear icon → "Claude" section has a single "Уведомления" toggle. Turning it on writes a
 `hooks` block into Claude Code desktop's own `settings.json` (`Notification` and `Stop` events,
@@ -583,7 +606,7 @@ PHP logs when running under Docker: `docker compose logs -f app`.
 | `[llm]` | The "Сгенерировать" ("Generate") buttons (branch, commit message, PR description); the quote stays in English | Everything else; you can type the texts by hand |
 | `[github]` | Reviewers in the `gh pr create` command | The command itself is still copied |
 | `[git]`, `[templates]`, `[docs]` | The `Rebase …` entries, project names and documentation links inside the copied texts | The texts are copied without those pieces |
-| `[worktime]`, `[dashboard]`, `[salary]`, `[currency]`, `[services]` | Nothing — the defaults kick in | Everything |
+| `[checklist]`, `[worktime]`, `[dashboard]`, `[salary]`, `[currency]`, `[services]` | Nothing — the defaults kick in (the checklist stays strictly ordered) | Everything |
 | `[claude]` | The "Claude" section in the settings popover doesn't appear | Everything else |
 | No `params.ini` at all | Every integration | The checklist, the branch, copying texts, the progress bar |
 

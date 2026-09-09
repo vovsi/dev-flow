@@ -30,12 +30,14 @@ try {
     $gitRebaseTargets = Config::gitRebaseTargets();
     $reviewSkipMigrationRepos = Config::reviewSkipMigrationRepos();
     $reviewDocLinks = Config::reviewDocLinks();
+    $checklistStrictOrder = Config::checklistStrictOrder();
 } catch (\Throwable $e) {
     $githubReviewers = [];
     $workTime = Config::WORK_TIME_DEFAULTS;
     $gitRebaseTargets = [];
     $reviewSkipMigrationRepos = [];
     $reviewDocLinks = [];
+    $checklistStrictOrder = Config::CHECKLIST_STRICT_ORDER_DEFAULT;
 }
 
 // Флаги кодирования конфига для inline-скрипта (см. window.DEVFLOW_CONFIG в конце страницы)
@@ -272,7 +274,8 @@ $assetVersion = static function (string $relativePath): string {
         githubReviewers: <?= json_encode($githubReviewers, JSON_ENCODE_FLAGS) ?>,
         workTime: <?= json_encode($workTime, JSON_ENCODE_FLAGS) ?>,
         reviewSkipMigrationRepos: <?= json_encode($reviewSkipMigrationRepos, JSON_ENCODE_FLAGS) ?>,
-        reviewDocLinks: <?= json_encode($reviewDocLinks, JSON_ENCODE_FLAGS | JSON_FORCE_OBJECT) ?>
+        reviewDocLinks: <?= json_encode($reviewDocLinks, JSON_ENCODE_FLAGS | JSON_FORCE_OBJECT) ?>,
+        checklistStrictOrder: <?= json_encode($checklistStrictOrder, JSON_ENCODE_FLAGS) ?>
     };
 </script>
 <script src="assets/js/app.js?v=<?= $assetVersion('assets/js/app.js') ?>"></script>
