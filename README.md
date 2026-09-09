@@ -80,13 +80,13 @@ database is just a file next to the code.
 |---|---|---|
 | Указать Story Points *(set Story Points)* | A modal with 1/2/3/5/8/13 → writes the field in Jira. The item is hidden if Story Points are already set on the task | Jira |
 | Перевести в статус Doing *(transition to Doing)* | Transitions the Jira task to the status from your config. The item is hidden if the task is already in that status in Jira (for example, you moved it there by hand) | Jira |
-| Создать ветку в Git *(create a git branch)* | Generates a branch name with the LLM from the task title, copies it to the clipboard, stores it in the DB | LLM (optional) |
+| Создать ветку в Git *(create a git branch)* | Generates a branch name with the LLM from the task title, copies it to the clipboard, stores it in the DB. The item is hidden once the task already has a branch name saved — the name itself stays at the bottom of the screen with its git commands dropdown | LLM (optional) |
 | Закоммитить код *(commit the code)* | A "what did you do" field → the LLM builds the commit message subject line in Conventional Commits form with the Jira key | LLM |
 | Создать PR *(create the PR)* | Hands you a ready `gh pr create --draft` command with your reviewers, then asks for the link to the PR you created | GitHub CLI |
 | Проверить PR Claude Code *(review the PR with Claude Code)* | Copies a ready review prompt with the PR link and links to your internal documentation | — |
 | Указать описание PR *(write the PR description)* | The LLM fills in your team's PR description template, plus an optional deploy instruction block | LLM |
 | PR`s переведены в Ready for review | Just a tick | — |
-| Оставить описание в Jira *(leave a description in Jira)* | Copies formatted text for a Jira comment | — |
+| Оставить описание в Jira *(leave a description in Jira)* | Copies formatted text for a Jira comment. With the "Claude Skill" chip on, there's also a `/commit-results` button that copies that command — a Claude Code skill fills in the `Results` section for you | — |
 | Перевести задачу в Pull Request | Transitions the Jira task to the status from your config | Jira |
 | Затрекать время *(log time)* | A slider spanning your whole work day (lunch excluded) → adds a worklog to Jira. When you hit your daily norm, a congrats modal shows today's earnings and a motivational quote | Jira |
 | PR отправлен ревьюверу *(the PR was sent to a reviewer)* | Just a tick | — |
@@ -98,7 +98,9 @@ database) — **on by default**. While it's on, `Закоммитить код`,
 Claude Code` and `Указать описание PR` are hidden from the table above, and a single
 `Закоммитить изменения` *(commit the changes)* item appears instead right after `Создать ветку
 в Git`, with a `/commit` command for a Claude Code skill that's assumed to handle the commit,
-the PR, its description and the review for you.
+the PR, its description and the review for you. `Оставить описание в Jira` also grows a
+`/commit-results` button in the same mode — the command for the skill that writes the `Results`
+section of that description.
 
 Turn it off for a task you're doing by hand — open the task and click the "Claude Skill" chip in
 the row right under the task key. It's per task, not global: some tasks can run through the skill

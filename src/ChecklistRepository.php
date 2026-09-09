@@ -41,6 +41,13 @@ final class ChecklistRepository
     private const HIDE_IF_ALREADY_IN_DOING_STATUS_CODE = 'status_doing';
 
     /**
+     * Пункт скрывается, если у задачи уже сохранено имя ветки (tasks.git_branch) — ветка
+     * создана, и шаг не нужен. Правило по факту сохранённой ветки, а не по отметке пункта:
+     * имя ветки живёт отдельно от чек-листа и остаётся у задачи после «Начать заново».
+     */
+    private const HIDE_IF_BRANCH_ALREADY_SET_CODE = 'git_branch';
+
+    /**
      * Пункты, которые скрываются у задачи, пока включён её собственный флаг
      * tasks.claude_code_skill_mode (по умолчанию включён у каждой новой задачи, переключается
      * per-task в настройках приложения при открытой задаче — раньше был общим конфигом
@@ -115,6 +122,7 @@ final class ChecklistRepository
         $conditions = ''
             . $this->hiddenByFlagCondition('t.story_points_set = 1', [self::HIDE_IF_STORY_POINTS_ALREADY_SET_CODE], 'sp_set', $params)
             . $this->hiddenByFlagCondition('t.in_doing_status = 1', [self::HIDE_IF_ALREADY_IN_DOING_STATUS_CODE], 'in_doing', $params)
+            . $this->hiddenByFlagCondition("COALESCE(t.git_branch, '') != ''", [self::HIDE_IF_BRANCH_ALREADY_SET_CODE], 'branch_set', $params)
             . $this->hiddenByFlagCondition('t.claude_code_skill_mode = 1', self::CLAUDE_CODE_SKILL_MODE_HIDDEN_CODES, 'skill_hidden', $params)
             . $this->hiddenByFlagCondition('t.claude_code_skill_mode = 0', self::CLAUDE_CODE_SKILL_MODE_ONLY_CODES, 'skill_only', $params)
             . $this->hiddenByFlagCondition('t.waiting_for_deploy = 1', self::WAITING_FOR_DEPLOY_HIDDEN_CODES, 'deploy_hidden', $params);

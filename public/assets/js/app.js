@@ -27,8 +27,12 @@
     }
 
     /** Команда скилла Claude Code, который делает коммит за разработчика (пункт `skill_commit`,
-     * виден только при включённом у задачи флаге claude_code_skill_mode — настройки → «Эта задача») */
+     * виден только при включённом у задачи флаге claude_code_skill_mode — чип «Claude Skill») */
     const SKILL_COMMIT_COMMAND = '/commit';
+
+    /** Команда скилла Claude Code, который заполняет секцию Results в описании для Jira
+     * (пункт `jira_description`, показывается только при включённом флаге claude_code_skill_mode) */
+    const SKILL_COMMIT_RESULTS_COMMAND = '/commit-results';
 
     const JIRA_DESCRIPTION_HTML =
         '<b> Results</b><br/>1. <br/>' +
@@ -1460,19 +1464,16 @@
         },
 
         // Создать ветку в Git — запросить название, скопировать, сохранить в задаче.
-        // Если ветка уже была сохранена ранее — можно оставить её без изменений в БД
+        // Кнопки «Оставить текущую» здесь нет: пункт скрыт, пока у задачи уже сохранена ветка
         git_branch: async (item) => {
-            const existingBranch = state.task.git_branch;
-            const KEEP_CURRENT = Symbol('keep-current-branch');
-            const buttons = [{ label: 'Отмена', value: null }];
-            if (existingBranch) {
-                buttons.push({ label: 'Оставить текущую', value: KEEP_CURRENT });
-            }
-            buttons.push({
-                label: 'Сохранить',
-                primary: true,
-                getValue: () => modalBodyEl.querySelector('input').value.trim() || null,
-            });
+            const buttons = [
+                { label: 'Отмена', value: null },
+                {
+                    label: 'Сохранить',
+                    primary: true,
+                    getValue: () => modalBodyEl.querySelector('input').value.trim() || null,
+                },
+            ];
 
             const result = await showModal(
                 'Название ветки',
@@ -1511,10 +1512,6 @@
                 }
             );
 
-            if (result === KEEP_CURRENT) {
-                await markDone(item.id);
-                return;
-            }
             if (!result) return;
 
             const branch = result;
@@ -1817,6 +1814,12 @@
                 `<div class="snippet" style="font-family: inherit;">${JIRA_DESCRIPTION_HTML}</div>` +
                     '<div class="modal-copy-actions">' +
                     '<button type="button" class="btn btn-secondary" data-copy-btn>Скопировать</button>' +
+                    // секцию Results заполняет скилл Claude Code — команда нужна только тем задачам,
+                    // которые ведутся через него (флаг задачи, а не состав чек-листа: сам пункт им не скрыт)
+                    (isTaskFlagEnabled(state.task, 'claude_code_skill_mode')
+                        ? '<button type="button" class="btn btn-secondary" data-copy-results-btn>' +
+                          `${escapeHtml(SKILL_COMMIT_RESULTS_COMMAND)}</button>`
+                        : '') +
                     // ссылку на PR сохраняет пункт «Создать PR» — пока он отключён, копировать нечего
                     (hasChecklistItem('pull_request')
                         ? '<button type="button" class="btn btn-secondary" data-copy-pr-btn>Скопировать PR</button>'
@@ -1830,6 +1833,10 @@
                     bodyEl.querySelector('[data-copy-btn]').addEventListener('click', async () => {
                         await copyRichText(JIRA_DESCRIPTION_HTML, JIRA_DESCRIPTION_PLAIN);
                         notifyCopied('описание для Jira (с форматированием)');
+                    });
+                    bodyEl.querySelector('[data-copy-results-btn]')?.addEventListener('click', async () => {
+                        await copyText(SKILL_COMMIT_RESULTS_COMMAND);
+                        notifyCopied(`команда «${SKILL_COMMIT_RESULTS_COMMAND}»`);
                     });
                     bodyEl.querySelector('[data-copy-pr-btn]')?.addEventListener('click', async () => {
                         await copyText(sessionStorage.getItem(prLinkStorageKey()) || '');
