@@ -58,16 +58,23 @@ final class TaskRepository
         $stmt->execute(['branch' => $branch, 'id' => $taskId]);
     }
 
-    public function updateJiraData(int $taskId, string $title, ?string $description, bool $storyPointsSet): void
-    {
+    public function updateJiraData(
+        int $taskId,
+        string $title,
+        ?string $description,
+        bool $storyPointsSet,
+        bool $inDoingStatus
+    ): void {
         $stmt = $this->db->prepare(
-            'UPDATE tasks SET title = :title, description = :description, story_points_set = :story_points_set
+            'UPDATE tasks SET title = :title, description = :description,
+                    story_points_set = :story_points_set, in_doing_status = :in_doing_status
              WHERE id = :id'
         );
         $stmt->execute([
             'title' => $title,
             'description' => $description,
             'story_points_set' => $storyPointsSet ? 1 : 0,
+            'in_doing_status' => $inDoingStatus ? 1 : 0,
             'id' => $taskId,
         ]);
     }
@@ -80,6 +87,17 @@ final class TaskRepository
     public function updateClaudeCodeSkillMode(int $taskId, bool $enabled): void
     {
         $stmt = $this->db->prepare('UPDATE tasks SET claude_code_skill_mode = :enabled WHERE id = :id');
+        $stmt->execute(['enabled' => $enabled ? 1 : 0, 'id' => $taskId]);
+    }
+
+    /**
+     * Переключает признак «задача ждёт выливки другой задачи» (настройки → «Эта задача»).
+     * Пока он включён, шаги про Ready for review и отправку PR ревьюверу из чек-листа
+     * скрываются — см. ChecklistRepository::WAITING_FOR_DEPLOY_HIDDEN_CODES.
+     */
+    public function updateWaitingForDeploy(int $taskId, bool $enabled): void
+    {
+        $stmt = $this->db->prepare('UPDATE tasks SET waiting_for_deploy = :enabled WHERE id = :id');
         $stmt->execute(['enabled' => $enabled ? 1 : 0, 'id' => $taskId]);
     }
 

@@ -33,6 +33,14 @@ final class ChecklistRepository
     private const HIDE_IF_STORY_POINTS_ALREADY_SET_CODE = 'story_points';
 
     /**
+     * Пункт скрывается, если задача в Jira уже в рабочем статусе (tasks.in_doing_status,
+     * обновляется при каждой синхронизации по [atlassian].doing_status) — переводить её
+     * туда повторно нечего. Правило по реальному статусу, а не по отметке в чек-листе:
+     * задачу могли перевести в работу руками в Jira или из другого места.
+     */
+    private const HIDE_IF_ALREADY_IN_DOING_STATUS_CODE = 'status_doing';
+
+    /**
      * Пункты, которые скрываются у задачи, пока включён её собственный флаг
      * tasks.claude_code_skill_mode (по умолчанию включён у каждой новой задачи, переключается
      * per-task в настройках приложения при открытой задаче — раньше был общим конфигом
@@ -58,6 +66,19 @@ final class ChecklistRepository
      */
     private const CLAUDE_CODE_SKILL_MODE_ONLY_CODES = [
         'skill_commit',
+    ];
+
+    /**
+     * Пункты, которые скрываются у задачи, пока включён её флаг tasks.waiting_for_deploy
+     * («задача ждёт выливки другой задачи», настройки → «Эта задача»). Пока чужая задача не
+     * вылита, PR этой задачи не переводят в Ready for review и не отправляют ревьюверу —
+     * значит эти шаги не «ещё не сделаны», а не нужны вовсе. Механика та же, что у
+     * CLAUDE_CODE_SKILL_MODE_HIDDEN_CODES: отметки в task_checklist остаются в БД, выключение
+     * флага возвращает пункты вместе с уже проставленными галочками.
+     */
+    private const WAITING_FOR_DEPLOY_HIDDEN_CODES = [
+        'status_ready_for_review',
+        'send_pr',
     ];
 
     public function __construct(private readonly PDO $db)
@@ -86,33 +107,24 @@ final class ChecklistRepository
      */
     public function getStatusesForTask(int $taskId): array
     {
-        $params = [
-            'task_id' => $taskId,
-            'hidden_code' => self::HIDE_IF_STORY_POINTS_ALREADY_SET_CODE,
-        ];
+        $params = ['task_id' => $taskId];
 
-        $hiddenPlaceholders = [];
-        foreach (self::CLAUDE_CODE_SKILL_MODE_HIDDEN_CODES as $index => $code) {
-            $hiddenPlaceholders[] = ':skill_hidden_' . $index;
-            $params['skill_hidden_' . $index] = $code;
-        }
-        $onlyPlaceholders = [];
-        foreach (self::CLAUDE_CODE_SKILL_MODE_ONLY_CODES as $index => $code) {
-            $onlyPlaceholders[] = ':skill_only_' . $index;
-            $params['skill_only_' . $index] = $code;
-        }
+        // Все условия читаются прямо из своей же строки tasks (t.*) — и per-task флаги режимов,
+        // и снятое из Jira состояние самой задачи, поэтому фильтр строится в самом запросе,
+        // без обращения к Config
+        $conditions = ''
+            . $this->hiddenByFlagCondition('t.story_points_set = 1', [self::HIDE_IF_STORY_POINTS_ALREADY_SET_CODE], 'sp_set', $params)
+            . $this->hiddenByFlagCondition('t.in_doing_status = 1', [self::HIDE_IF_ALREADY_IN_DOING_STATUS_CODE], 'in_doing', $params)
+            . $this->hiddenByFlagCondition('t.claude_code_skill_mode = 1', self::CLAUDE_CODE_SKILL_MODE_HIDDEN_CODES, 'skill_hidden', $params)
+            . $this->hiddenByFlagCondition('t.claude_code_skill_mode = 0', self::CLAUDE_CODE_SKILL_MODE_ONLY_CODES, 'skill_only', $params)
+            . $this->hiddenByFlagCondition('t.waiting_for_deploy = 1', self::WAITING_FOR_DEPLOY_HIDDEN_CODES, 'deploy_hidden', $params);
 
-        // Режим читается прямо из своей же задачи (t.claude_code_skill_mode) — флаг per-task,
-        // а не общий конфиг, поэтому фильтр строится в самом запросе, без обращения к Config.
         $stmt = $this->db->prepare(
             'SELECT c.id, c.code, c.title, tc.is_done
              FROM checklist c
              JOIN task_checklist tc ON tc.checklist_id = c.id
              JOIN tasks t ON t.id = tc.task_id
-             WHERE tc.task_id = :task_id
-               AND NOT (c.code = :hidden_code AND t.story_points_set = 1)
-               AND NOT (t.claude_code_skill_mode = 1 AND c.code IN (' . implode(', ', $hiddenPlaceholders) . '))
-               AND NOT (t.claude_code_skill_mode = 0 AND c.code IN (' . implode(', ', $onlyPlaceholders) . '))
+             WHERE tc.task_id = :task_id' . $conditions . '
              ORDER BY c.sort_order'
         );
         $stmt->execute($params);
@@ -126,6 +138,28 @@ final class ChecklistRepository
             ],
             $stmt->fetchAll(PDO::FETCH_ASSOC)
         );
+    }
+
+    /**
+     * Собирает условие «пункты из $codes не показывать, пока верно $flagExpression» для
+     * getStatusesForTask(). Общий хелпер вместо копипасты цикла на каждое правило скрытия по
+     * колонке tasks: новое правило — это одна строка в getStatusesForTask(). Пустой список
+     * кодов даёт пустое условие, а не битый SQL `IN ()`.
+     */
+    private function hiddenByFlagCondition(string $flagExpression, array $codes, string $paramPrefix, array &$params): string
+    {
+        if ($codes === []) {
+            return '';
+        }
+
+        $placeholders = [];
+        foreach ($codes as $index => $code) {
+            $name = $paramPrefix . '_' . $index;
+            $placeholders[] = ':' . $name;
+            $params[$name] = $code;
+        }
+
+        return ' AND NOT (' . $flagExpression . ' AND c.code IN (' . implode(', ', $placeholders) . '))';
     }
 
     /**

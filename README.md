@@ -79,7 +79,7 @@ database is just a file next to the code.
 | Step | What the app does | Integration needed |
 |---|---|---|
 | Указать Story Points *(set Story Points)* | A modal with 1/2/3/5/8/13 → writes the field in Jira. The item is hidden if Story Points are already set on the task | Jira |
-| Перевести в статус Doing *(transition to Doing)* | Transitions the Jira task to the status from your config | Jira |
+| Перевести в статус Doing *(transition to Doing)* | Transitions the Jira task to the status from your config. The item is hidden if the task is already in that status in Jira (for example, you moved it there by hand) | Jira |
 | Создать ветку в Git *(create a git branch)* | Generates a branch name with the LLM from the task title, copies it to the clipboard, stores it in the DB | LLM (optional) |
 | Закоммитить код *(commit the code)* | A "what did you do" field → the LLM builds the commit message subject line in Conventional Commits form with the Jira key | LLM |
 | Создать PR *(create the PR)* | Hands you a ready `gh pr create --draft` command with your reviewers, then asks for the link to the PR you created | GitHub CLI |
@@ -100,21 +100,34 @@ Claude Code` and `Указать описание PR` are hidden from the table 
 в Git`, with a `/commit` command for a Claude Code skill that's assumed to handle the commit,
 the PR, its description and the review for you.
 
-Turn it off for a task you're doing by hand — open the task, click the gear icon, and flip the
-"Claude Code Skill" switch in the "Эта задача" *(this task)* section of the settings popover.
-It's per task, not global: some tasks can run through the skill while others don't. Switching it
-back on never loses progress — the full checklist's ticks are exactly as you left them.
+Turn it off for a task you're doing by hand — open the task and click the "Claude Skill" chip in
+the row right under the task key. It's per task, not global: some tasks can run through the skill
+while others don't. Switching it back on never loses progress — the full checklist's ticks are
+exactly as you left them.
+
+## Waiting for another task's deploy (per task)
+
+Sometimes a task can't be finished until another one is deployed: the PRs stay as drafts and
+nobody gets pinged. Open the task and click the "Ждёт выливки" *(waiting for a deploy)* chip in
+the row under the task key — the `tasks.waiting_for_deploy` flag, **off by default**. While it's
+on, `PR`s переведены в Ready for review` and `PR отправлен
+ревьюверу` disappear from the checklist, so they don't block the steps after them and don't count
+towards the progress bar. Switch it off once the other task is out and both items come back
+exactly as you left them — ticks included.
 
 Independently of the checklist you also get: a back arrow in the top left corner (returns to the
 link screen so you can open another task), a "time logged today" indicator, quick time logging
 with a single slider, a list of today's tasks, and a git commands dropdown next to the branch
 name (`checkout -b`, `push`, `rebase` onto your base branches).
 
-The gear icon in the top right opens the settings popover — the theme switch (Светлая/Тёмная); an
-"Эта задача" *(this task)* section, shown only while a task is open, with the "Claude Code Skill"
-switch described [above](#claude-code-skill-mode-per-task); and, if `[claude]` is configured, a
-"Claude" section with a single "Уведомления" toggle that turns Claude Code desktop's Telegram
-notification hooks on and off (see [9. Claude Code notifications](#9-claude-code-notifications--claude)).
+Per-task flags live in a row of chips right under the task key, not in the settings — both the
+"Claude Skill" and "Ждёт выливки" chips described above are there, and clicking one takes effect
+right away.
+
+The gear icon in the top right opens the settings popover, which holds only app-wide settings —
+the theme switch (Светлая/Тёмная) and, if `[claude]` is configured, a "Claude" section with a
+single "Уведомления" toggle that turns Claude Code desktop's Telegram notification hooks on and
+off (see [9. Claude Code notifications](#9-claude-code-notifications--claude)).
 
 The link screen also shows a small dashboard above the input field: two tiles side by side, both
 counting Jira tasks **assigned to you** that have been sitting in one status for longer than its
@@ -273,6 +286,9 @@ curl -s -u "you@example.com:YOUR_TOKEN" \
 ```
 
 Use the `transitions[].name` (or `.to.name`) values. Defaults are `Doing` and `Pull request`.
+`doing_status` is also matched against the task's **current** status: while the task already
+sits in one of those statuses, the Перевести в статус Doing *(transition to Doing)* item is
+hidden from the checklist.
 
 **`blocked_status`** — the status counted by the orange "Blocked" dashboard tile (see
 [7. Dashboard metrics](#7-dashboard-metrics--dashboard)). Nothing is ever transitioned into it,

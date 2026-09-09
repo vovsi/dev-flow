@@ -49,7 +49,8 @@ final class JiraSyncService
             (int) $task['id'],
             $issue['title'],
             $issue['description'],
-            $issue['story_points_set']
+            $issue['story_points_set'],
+            $issue['in_doing_status']
         );
 
         return $this->tasks->findById((int) $task['id']);

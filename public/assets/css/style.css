@@ -387,12 +387,6 @@ body {
     color: var(--text-secondary);
 }
 
-/* Раздел с настройками в рамках текущей задачи (#task-settings-section) — акцентный цвет
-   вместо серого, чтобы отличаться от общих (не привязанных к задаче) разделов попапа */
-.popover-label--task {
-    color: var(--accent);
-}
-
 .popover-toggle-row {
     display: flex;
     align-items: center;
@@ -1400,6 +1394,63 @@ html[data-theme="dark"] .modal:has(.congrats-modal) {
 
 .task-id:hover {
     text-decoration: underline;
+}
+
+/* Флаги текущей задачи (#task-flags) — ряд компактных переключателей-«чипов» прямо под кодом
+   задачи. Раньше это были тумблеры в попапе настроек (раздел «Эта задача»): попап приходилось
+   открывать ради двух галочек, а флаги меняют состав чек-листа, то есть относятся к экрану
+   задачи, а не к настройкам приложения. Ряд переносится по строкам, поэтому новый флаг просто
+   встаёт в него — в окне 500×500 в строку влезает четыре коротких чипа, дальше идёт перенос */
+.task-flags {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 2px;
+}
+
+.task-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 550;
+    line-height: 1.25;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+/* Точка вместо тумблера: на чипе такого размера полноценный переключатель не помещается,
+   а состояние всё равно читается по заливке самого чипа */
+.task-flag-dot {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-tertiary);
+    transition: background 0.15s ease;
+}
+
+.task-flag--on {
+    border-color: transparent;
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.task-flag--on .task-flag-dot {
+    background: var(--accent);
+}
+
+.task-flag:disabled {
+    opacity: 0.5;
+    cursor: default;
 }
 
 .progress {

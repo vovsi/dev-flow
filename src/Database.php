@@ -119,6 +119,12 @@ final class Database
         if (!in_array('claude_code_skill_mode', $columns, true)) {
             $pdo->exec('ALTER TABLE tasks ADD COLUMN claude_code_skill_mode INTEGER NOT NULL DEFAULT 1');
         }
+        if (!in_array('in_doing_status', $columns, true)) {
+            $pdo->exec('ALTER TABLE tasks ADD COLUMN in_doing_status INTEGER NOT NULL DEFAULT 0');
+        }
+        if (!in_array('waiting_for_deploy', $columns, true)) {
+            $pdo->exec('ALTER TABLE tasks ADD COLUMN waiting_for_deploy INTEGER NOT NULL DEFAULT 0');
+        }
     }
 
     /**

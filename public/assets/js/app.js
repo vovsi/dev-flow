@@ -275,8 +275,7 @@
     const todayTasksBtn = document.getElementById('today-tasks-btn');
     const settingsBtn = document.getElementById('settings-btn');
     const themePopover = document.getElementById('theme-popover');
-    const taskSettingsSection = document.getElementById('task-settings-section');
-    const taskSkillModeToggle = document.getElementById('task-skill-mode-toggle');
+    const taskFlagsRow = document.getElementById('task-flags');
     const claudeSettingsSection = document.getElementById('claude-settings-section');
     const claudeNotificationsToggle = document.getElementById('claude-notifications-toggle');
     const toastEl = document.getElementById('toast');
@@ -483,9 +482,9 @@
         return state.checklist.some((entry) => entry.code === code);
     }
 
-    /** tasks.claude_code_skill_mode приходит из SQLite как 0/1 — приводим к JS-булеву */
-    function isClaudeCodeSkillModeEnabled(task) {
-        return Boolean(Number(task.claude_code_skill_mode));
+    /** Флаги задачи приходят из SQLite как 0/1 — приводим к JS-булеву */
+    function isTaskFlagEnabled(task, field) {
+        return Boolean(Number(task[field]));
     }
 
     /** Описание, введённое в пункте «Закоммитить код» — подставляется в поле пункта «Указать
@@ -813,43 +812,81 @@
         });
     });
 
-    // ==================== Claude Code Skill для текущей задачи (раздел «Эта задача») ====================
+    // ==================== Флаги текущей задачи (ряд под кодом задачи) ====================
 
     /**
-     * Показывает/скрывает раздел «Эта задача» в настройках и синхронизирует тумблер с
-     * state.task — в отличие от раздела «Claude» ниже, это не общая настройка приложения,
-     * а флаг конкретной задачи (tasks.claude_code_skill_mode), поэтому раздел виден только
-     * пока задача открыта.
+     * Флаги конкретной задачи: поле в tasks → подпись переключателя, эндпоинт, подсказка и
+     * тексты тостов. Все они устроены одинаково (записать флаг задачи → перечитать чек-лист),
+     * поэтому весь ряд рисуется из этой карты — **новый флаг задачи это одна запись здесь**,
+     * ни разметку, ни обработчик клика править не нужно.
      */
-    function updateTaskSettingsSection() {
+    const TASK_FLAG_TOGGLES = [
+        {
+            field: 'claude_code_skill_mode',
+            label: 'Claude Skill',
+            endpoint: '../api/toggle_claude_code_skill_mode.php',
+            tooltip: 'Пункты коммита, PR, ревью и описания PR делает скилл Claude Code — чек-лист их скрывает и показывает вместо них «Закоммитить изменения»',
+            onText: 'Claude Code Skill включён для этой задачи',
+            offText: 'Claude Code Skill выключен для этой задачи',
+        },
+        {
+            field: 'waiting_for_deploy',
+            label: 'Ждёт выливки',
+            endpoint: '../api/toggle_waiting_for_deploy.php',
+            tooltip: 'Задача ждёт, пока выльют другую задачу — чек-лист скрывает шаги «PR`s переведены в Ready for review» и «PR отправлен ревьюверу»',
+            onText: 'Задача ждёт выливки другой задачи',
+            offText: 'Задача больше не ждёт выливки',
+        },
+    ];
+
+    /**
+     * Рисует ряд переключателей флагов под кодом задачи. Состояние берётся из state.task
+     * (значения приходят в самом объекте задачи, отдельного запроса не нужно), поэтому
+     * перерисовки достаточно и для входа в задачу, и после переключения.
+     */
+    function renderTaskFlags() {
         if (!state.task) {
-            taskSettingsSection.classList.add('hidden');
+            taskFlagsRow.innerHTML = '';
             return;
         }
-        taskSkillModeToggle.checked = isClaudeCodeSkillModeEnabled(state.task);
-        taskSettingsSection.classList.remove('hidden');
+
+        taskFlagsRow.innerHTML = TASK_FLAG_TOGGLES.map((flag) => {
+            const enabled = isTaskFlagEnabled(state.task, flag.field);
+            return `<button type="button" class="task-flag${enabled ? ' task-flag--on' : ''}"` +
+                ` data-flag="${escapeHtml(flag.field)}" aria-pressed="${enabled}"` +
+                ` data-tooltip="${escapeHtml(flag.tooltip)}">` +
+                `<span class="task-flag-dot"></span>${escapeHtml(flag.label)}</button>`;
+        }).join('');
     }
 
-    // Пишет только в SQLite (без внешнего сервиса) — запрос быстрый, отдельная индикация
-    // загрузки не нужна (см. правило в CLAUDE.md), тот же приём, что у claudeNotificationsToggle
-    taskSkillModeToggle.addEventListener('change', async () => {
-        const enabled = taskSkillModeToggle.checked;
-        taskSkillModeToggle.disabled = true;
+    // Делегирование на ряд, а не обработчик на каждую кнопку: ряд перерисовывается целиком
+    // при каждом переключении. Пишет только в SQLite (без внешнего сервиса) — запрос быстрый,
+    // отдельная индикация загрузки не нужна (см. правило в CLAUDE.md)
+    taskFlagsRow.addEventListener('click', async (event) => {
+        const button = event.target.closest('.task-flag');
+        if (!button || button.disabled || !state.task) {
+            return;
+        }
+
+        const flag = TASK_FLAG_TOGGLES.find((entry) => entry.field === button.dataset.flag);
+        if (!flag) {
+            return;
+        }
+
+        const enabled = !isTaskFlagEnabled(state.task, flag.field);
+        button.disabled = true;
         try {
-            const data = await apiCall('../api/toggle_claude_code_skill_mode.php', {
-                task_id: state.task.id,
-                enabled,
-            });
+            const data = await apiCall(flag.endpoint, { task_id: state.task.id, enabled });
             state.task = data.task;
             state.checklist = data.checklist;
-            taskSkillModeToggle.checked = isClaudeCodeSkillModeEnabled(state.task);
+            // Вид кнопки считается по state.task, поэтому при ошибке откатывать нечего —
+            // ряд просто остаётся в прежнем состоянии
+            renderTaskFlags();
             renderChecklist();
-            showToast(enabled ? 'Claude Code Skill включён для этой задачи' : 'Claude Code Skill выключен для этой задачи');
+            showToast(enabled ? flag.onText : flag.offText);
         } catch (e) {
-            taskSkillModeToggle.checked = !enabled; // откатываем визуально
             showToast(e.message || 'Не удалось изменить настройку задачи');
-        } finally {
-            taskSkillModeToggle.disabled = false;
+            button.disabled = false;
         }
     });
 
@@ -1069,7 +1106,7 @@
         renderChecklist();
         changeTaskBtn.classList.remove('hidden'); // возврат к вводу ссылки есть только внутри задачи
         updateTrackTimeAvailability(); // быстрый трек времени доступен только внутри задачи
-        updateTaskSettingsSection(); // раздел «Эта задача» в настройках тоже только внутри задачи
+        renderTaskFlags(); // ряд флагов живёт на экране задачи, значит рисуется вместе с ним
     }
 
     function showLinkScreen() {
@@ -1083,7 +1120,7 @@
         renderRecentTasks();
         changeTaskBtn.classList.add('hidden');
         updateTrackTimeAvailability();
-        updateTaskSettingsSection();
+        renderTaskFlags();
     }
 
     // ==================== Последние открытые задачи (экран ввода ссылки) ====================

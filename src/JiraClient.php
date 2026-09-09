@@ -24,7 +24,7 @@ final class JiraClient
     }
 
     /**
-     * @return array{title: string, description: ?string, story_points_set: bool}
+     * @return array{title: string, description: ?string, story_points_set: bool, in_doing_status: bool}
      */
     public function fetchIssue(string $taskId): array
     {
@@ -33,7 +33,7 @@ final class JiraClient
         $data = $this->request(
             'GET',
             '/rest/api/2/issue/' . rawurlencode($taskId)
-                . '?fields=summary,description,' . rawurlencode($this->storyPointsFieldId)
+                . '?fields=summary,description,status,' . rawurlencode($this->storyPointsFieldId)
                 . '&expand=renderedFields',
             null,
             "для задачи {$taskId}"
@@ -43,7 +43,28 @@ final class JiraClient
             'title' => (string) ($data['fields']['summary'] ?? ''),
             'description' => $data['renderedFields']['description'] ?? null,
             'story_points_set' => ($data['fields'][$this->storyPointsFieldId] ?? null) !== null,
+            'in_doing_status' => $this->isDoingStatus((string) ($data['fields']['status']['name'] ?? '')),
         ];
+    }
+
+    /**
+     * Текущий статус задачи — один из $doingStatusNames. Сравнение регистронезависимое и по
+     * тому же списку, по которому ищется переход в Doing: иначе задача, уже переведённая в
+     * работу руками в Jira, считалась бы непереведённой.
+     */
+    private function isDoingStatus(string $statusName): bool
+    {
+        if ($statusName === '') {
+            return false;
+        }
+
+        foreach ($this->doingStatusNames as $doingStatusName) {
+            if (strcasecmp($statusName, $doingStatusName) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
