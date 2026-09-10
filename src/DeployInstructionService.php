@@ -53,4 +53,22 @@ PROMPT;
     {
         return $this->llmClient->chat(self::SYSTEM_PROMPT, $instruction);
     }
+
+    /**
+     * Та же инструкция, но собранная из введённых по отдельности частей — что сделать с базой,
+     * что с конфигами и что ещё важно (шаг «Закоммитить изменения»). Подписи нужны самой
+     * нейронке: без них склеенные абзацы читаются как один список шагов, и оформленный блок
+     * теряет разделение. Пустая часть в текст не попадает вовсе.
+     */
+    public function generateFromParts(string $database, string $config, string $other = ''): string
+    {
+        $parts = [];
+        foreach (['База данных' => $database, 'Конфиги' => $config, 'Другое' => $other] as $title => $text) {
+            if (trim($text) !== '') {
+                $parts[] = "{$title}:\n" . trim($text);
+            }
+        }
+
+        return $this->generate(implode("\n\n", $parts));
+    }
 }

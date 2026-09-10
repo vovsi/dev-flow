@@ -86,9 +86,9 @@ database is just a file next to the code.
 | Проверить PR Claude Code *(review the PR with Claude Code)* | Copies a ready review prompt with the PR link and links to your internal documentation | — |
 | Указать описание PR *(write the PR description)* | The LLM fills in your team's PR description template, plus an optional deploy instruction block | LLM |
 | PR`s переведены в Ready for review | Just a tick | — |
-| Оставить описание в Jira *(leave a description in Jira)* | Copies formatted text for a Jira comment. With the "Claude Skill" chip on, there's also a `/commit-results` button that copies that command — a Claude Code skill fills in the `Results` section for you | — |
-| Перевести задачу в Pull Request | Transitions the Jira task to the status from your config | Jira |
-| Затрекать время *(log time)* | A slider spanning your whole work day (lunch excluded) → adds a worklog to Jira. When you hit your daily norm, a congrats modal shows today's earnings and a motivational quote | Jira |
+| Оставить описание в Jira *(leave a description in Jira)* | An editable field with the `Results` / `Testing` / `Database` / `Config` / `Pull Requests` sections. If those sections are already in the task description in Jira, their current text is pulled into the field when the modal opens, so you can edit the description right here; if they aren't, the field starts from the empty template. The link to the PR (from `Создать PR`, or from `Закоммитить изменения` in Claude Code skill mode) is put into the `Pull Requests` section for you — as item 1 if nothing is there yet, or as the next number down if another PR is already listed, so a multi-repo task keeps them all. The `Database` and `Config` notes you typed in `Закоммитить изменения` land in the sections of the same name the same way, and the `Другое` note is appended in brackets to the last `Pull Requests` item. Nothing is written to Jira until you press the save button. `Скопировать` *(copy)* copies whatever is in the field, keeping the section headers bold. The button next to it writes the field into the task description in Jira — `Добавить в описание задачи` *(add to the task description)* when the sections aren't there yet, and `Пункты уже в описании` *(the sections are already in the description)*, disabled, until you edit the text: as soon as you do, it turns into `Сохранить в описании` *(save into the description)* and replaces the sections in Jira with what you typed (the text above them is kept). With the "Claude Skill" chip on, there's also a `[Claude] Results` button that copies the `/commit-results` command — a Claude Code skill fills in the `Results` section for you | Jira |
+| Перевести задачу в Pull Request | Transitions the Jira task to the status from your config. The item is hidden when the task's workflow has no transition into that status at all (nothing to transition with — the click could only fail), and also once the task is already in it | Jira |
+| Затрекать время *(log time)* | A slider spanning your whole work day (lunch excluded) → adds a worklog to Jira. When you hit your daily norm, a congrats modal shows today's earnings and a motivational quote. `Закончить бессрочно` *(call it a day)* logs the same time and closes the day even if you're short of the norm — see the [time logging](#time-logging) section | Jira |
 | PR отправлен ревьюверу *(the PR was sent to a reviewer)* | Just a tick | — |
 
 ## Claude Code skill mode (per task)
@@ -98,9 +98,21 @@ database) — **on by default**. While it's on, `Закоммитить код`,
 Claude Code` and `Указать описание PR` are hidden from the table above, and a single
 `Закоммитить изменения` *(commit the changes)* item appears instead right after `Создать ветку
 в Git`, with a `/commit` command for a Claude Code skill that's assumed to handle the commit,
-the PR, its description and the review for you. `Оставить описание в Jira` also grows a
-`/commit-results` button in the same mode — the command for the skill that writes the `Results`
-section of that description.
+the PR, its description and the review for you. Two things the skill can't know go into that
+item's modal, which is laid out as three numbered stages in the order you work through them:
+**1** the `/commit` command for the skill, **2** the link to the PR it created (an optional
+`Ссылка на PR` *(link to the PR)* field — the same link `Создать PR` would have stored, so the
+other steps can use it) and **3** an optional deploy instruction, typed as three fields —
+`Database` (migrations, SQL), `Config` (new parameters) and `Другое` *(other — anything else
+that matters)*. One `Сгенерировать` *(generate)* button sends them all to the LLM, which
+formats them into the block you paste into the PR yourself. The fields are also remembered for
+the current session: `Оставить описание в Jira` appends what you typed into the `Database` and
+`Config` sections of the task description — one list item per line, added below whatever is
+already there, exactly like the PR link — while `Другое` goes in brackets at the end of the
+last `Pull Requests` item, as a note on the PR you just added.
+`Оставить описание в Jira` also grows a `[Claude] Results` button in the same mode — it copies
+the `/commit-results` command for the skill that writes the `Results` section of that
+description.
 
 Turn it off for a task you're doing by hand — open the task and click the "Claude Skill" chip in
 the row right under the task key. It's per task, not global: some tasks can run through the skill
@@ -121,6 +133,21 @@ Independently of the checklist you also get: a back arrow in the top left corner
 link screen so you can open another task), a "time logged today" indicator, quick time logging
 with a single slider, a list of today's tasks, and a git commands dropdown next to the branch
 name (`checkout -b`, `push`, `rebase` onto your base branches).
+
+### Time logging
+
+The same modal is used everywhere — the round clock button next to the "time logged today"
+indicator and the `Затрекать время` checklist item open it. Drag the slider to the time **up to
+which the day is worked** (lunch is never logged) and pick one of two buttons:
+
+| Button | What it does |
+|---|---|
+| `Затрекать` *(log it)* | Sends the difference with what's already logged to Jira. Disabled while there's nothing to add |
+| `Закончить бессрочно` *(call it a day)* | Logs the same time (nothing added — nothing is sent to Jira) and marks the day as finished: the congrats modal opens and the indicator in the top left turns green with a tick, even if you're short of `[worktime].daily_hours` |
+
+The day-finished mark is kept in your browser for the current date only, so the indicator is
+green until midnight and starts over the next day. Hover it to see "Работа на сегодня закончена"
+*(work is done for today)* next to the time.
 
 Per-task flags live in a row of chips right under the task key, not in the settings — both the
 "Claude Skill" and "Ждёт выливки" chips described above are there, and clicking one takes effect
@@ -290,7 +317,11 @@ curl -s -u "you@example.com:YOUR_TOKEN" \
 Use the `transitions[].name` (or `.to.name`) values. Defaults are `Doing` and `Pull request`.
 `doing_status` is also matched against the task's **current** status: while the task already
 sits in one of those statuses, the Перевести в статус Doing *(transition to Doing)* item is
-hidden from the checklist.
+hidden from the checklist. `pull_request_status` is matched against the transitions the task's
+workflow actually offers: if there is no transition into that status (some workflows don't have
+one, and the transition out of the current status disappears once the task is in it), the
+Перевести задачу в Pull Request item is hidden too — otherwise clicking it could only end in
+"no such transition in Jira".
 
 **`blocked_status`** — the status counted by the orange "Blocked" dashboard tile (see
 [7. Dashboard metrics](#7-dashboard-metrics--dashboard)). Nothing is ever transitioned into it,
@@ -501,7 +532,8 @@ non_working_days = "sat, sun"
 
 Optional — the defaults are shown above. The slider position is the time **up to which the day
 is worked**; lunch is highlighted in orange and never logged. `daily_hours` is also the
-threshold that triggers the congrats modal.
+threshold that triggers the congrats modal (`Закончить бессрочно` opens it regardless of the
+norm, see [Time logging](#time-logging)).
 
 `non_working_days` is used by both dashboard metrics: hours that fall on those days
 are not counted, so a PR moved on Friday evening stays fine over the weekend. Write it as
@@ -534,8 +566,9 @@ The status names themselves come from `[atlassian]` — `pull_request_status` an
 
 ### 9. Earnings — `[salary]`, `[currency]`, `[services]`
 
-The first time log of the day that brings today's total up to `[worktime].daily_hours` opens a
-congrats modal: how much you earned today, plus a motivational quote.
+The first time log of the day that brings today's total up to `[worktime].daily_hours` — or
+pressing `Закончить бессрочно` at any point — opens a congrats modal: how much you earned today,
+plus a motivational quote.
 
 ```ini
 [salary]

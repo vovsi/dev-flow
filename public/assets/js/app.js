@@ -34,14 +34,29 @@
      * (пункт `jira_description`, показывается только при включённом флаге claude_code_skill_mode) */
     const SKILL_COMMIT_RESULTS_COMMAND = '/commit-results';
 
-    const JIRA_DESCRIPTION_HTML =
-        '<b> Results</b><br/>1. <br/>' +
-        '<b> Testing</b><br/>1. <br/>' +
-        '<b> Database</b><br/>1. <br/>' +
-        '<b> Config</b><br/>1. <br/>' +
-        '<b> Pull Requests</b><br/>1. <br/>';
+    /** Шаблон блока секций описания задачи (пункт `jira_description`) — приходит из того же
+     * PHP-кода, который пишет блок в Jira (JiraDescriptionService::template()), чтобы список
+     * секций не завёлся на фронте вторым, разъезжающимся с ним, экземпляром */
+    const JIRA_DESCRIPTION_TEMPLATE =
+        (window.DEVFLOW_CONFIG && window.DEVFLOW_CONFIG.jiraDescriptionTemplate) || '';
 
-    const JIRA_DESCRIPTION_PLAIN = 'Results\n1. \n\nTesting\n1. \n\nDatabase\n1. \n\nConfig\n1. \n\nPull Requests\n1. ';
+    /** Подпись кнопки записи пунктов в описание задачи: недоступность объясняется самой
+     * подписью (см. комментарий в обработчике jira_description). sectionsPresent — есть ли
+     * блок в описании сейчас, edited — правил ли пользователь текст в поле */
+    function jiraDescriptionSaveLabel(sectionsPresent, edited) {
+        if (sectionsPresent === null) return 'Описание Jira недоступно';
+        if (!sectionsPresent) return 'Добавить в описание задачи';
+
+        return edited ? 'Сохранить в описании' : 'Пункты уже в описании';
+    }
+
+    /** Блок секций для копирования с форматированием: wiki-жирный (*Results*) — в <b>, переводы
+     * строк — в <br/>, чтобы вставка в Jira сохраняла вид заголовков секций */
+    function jiraSectionsHtml(text) {
+        return escapeHtml(text)
+            .replace(/\*([^*\n]+)\*/g, '<b>$1</b>')
+            .replace(/\n/g, '<br/>');
+    }
 
     /** Блок «Важное исключение» промпта ревью — только если в конфиге перечислены репозитории
      * без миграций (REVIEW_SKIP_MIGRATION_REPOS); пустой список — блока в промпте нет */
@@ -478,14 +493,6 @@
         return `devflow_pr_link_${state.task.id}`;
     }
 
-    /** Есть ли пункт с таким code в чек-листе текущей задачи. Единственный источник правды о
-     * составе чек-листа — ответ API (пункты, скрытые флагом задачи claude_code_skill_mode,
-     * отфильтровывает ChecklistRepository), поэтому список скрытых пунктов на фронте не
-     * дублируется — зависимости между пунктами проверяются через эту функцию */
-    function hasChecklistItem(code) {
-        return state.checklist.some((entry) => entry.code === code);
-    }
-
     /** Флаги задачи приходят из SQLite как 0/1 — приводим к JS-булеву */
     function isTaskFlagEnabled(task, field) {
         return Boolean(Number(task[field]));
@@ -495,6 +502,24 @@
      * описание PR», чтобы не набирать один и тот же текст дважды */
     function commitDescriptionStorageKey() {
         return `devflow_commit_description_${state.task.id}`;
+    }
+
+    /** Заметки о выливке из пункта «Закоммитить изменения» (`database`/`config`/`other`) —
+     * уходят нейронке за оформленной инструкцией и попадают в описание задачи в пункте
+     * «Оставить описание в Jira»: первые две — пунктами одноимённых секций (как ссылка на PR),
+     * `other` — уточнением в скобках к последнему PR */
+    function deployNoteStorageKey(kind) {
+        return `devflow_deploy_${kind}_${state.task.id}`;
+    }
+
+    /** Запомнить (или забыть, если поле опустело) заметку о выливке из поля модалки */
+    function rememberDeployNote(kind, inputEl) {
+        const value = inputEl ? inputEl.value.trim() : '';
+        if (value) {
+            sessionStorage.setItem(deployNoteStorageKey(kind), value);
+        } else {
+            sessionStorage.removeItem(deployNoteStorageKey(kind));
+        }
     }
 
     /** Форматирует секунды в компактную строку «Хч Ум» для отображения затреканного времени */
@@ -1623,19 +1648,50 @@
         },
 
         // Закоммитить изменения — шаг режима Claude Code Skill: коммит, PR и его описание делает
-        // сам скилл, от приложения нужна только его команда в буфере. Инструкцию выливки скилл
-        // знать не может — поэтому здесь же (в режиме скилла пункт `pr_description` скрыт, а
-        // значит ввести её больше негде) можно оформить её блок для вставки в описание PR:
-        // логика та же, что у `pr_description` — результат копируется сразу, генерацию и
-        // копирование можно повторять. Инструкция необязательна, отметка пункта — «Готово»
+        // сам скилл, от приложения нужна только его команда в буфере. Ссылку на созданный PR
+        // (в режиме скилла пункт `pull_request`, который её обычно сохраняет, скрыт) и
+        // инструкцию выливки скилл знать не может — поэтому и то, и другое вводится здесь:
+        // ссылка ложится в тот же sessionStorage, откуда её берут остальные пункты, а
+        // инструкция оформляется блоком для вставки в описание PR (логика та же, что у
+        // `pr_description` — результат копируется сразу, генерацию и копирование можно
+        // повторять). Оба поля необязательны, отметка пункта — «Готово».
+        // Разметка разбита на три пронумерованных этапа (`.form-step`) в порядке работы:
+        // команда скилла → ссылка на PR → инструкция выливки — иначе три разнородных блока
+        // в одной полноэкранной модалке читались как одна свалка контролов
         skill_commit: async (item) => {
+            // Значения читаются после закрытия модалки: элементы к этому моменту уже вынуты из
+            // DOM, но ссылки на них замыкание держит — .value остаётся тем, что ввели
+            let prLinkInput = null;
+            let databaseInput = null;
+            let configInput = null;
+            let otherInput = null;
             const confirmed = await showModal(
                 'Закоммитить изменения',
                 '<div class="form-modal">' +
+                    '<div class="form-step">' +
+                    '<div class="form-step-head">' +
+                    '<span class="form-step-num">1</span>' +
+                    '<span class="form-step-title">Отдать коммит скиллу</span>' +
+                    '</div>' +
                     '<div class="modal-copy-actions">' +
                     `<button type="button" class="btn btn-secondary" data-copy-btn>Скопировать ${escapeHtml(SKILL_COMMIT_COMMAND)}</button>` +
                     '</div>' +
-                    `<textarea class="input textarea" data-instruction placeholder="${escapeHtml('Инструкция выливки (необязательно)...')}"></textarea>` +
+                    '</div>' +
+                    '<div class="form-step">' +
+                    '<div class="form-step-head">' +
+                    '<span class="form-step-num">2</span>' +
+                    '<span class="form-step-title">Ссылка на PR (необязательно)</span>' +
+                    '</div>' +
+                    `<input type="text" class="input" data-pr-link placeholder="${escapeHtml('Вставьте ссылку на PR...')}">` +
+                    '</div>' +
+                    '<div class="form-step form-step--grow">' +
+                    '<div class="form-step-head">' +
+                    '<span class="form-step-num">3</span>' +
+                    '<span class="form-step-title">Инструкция выливки (необязательно)</span>' +
+                    '</div>' +
+                    `<textarea class="input textarea" data-database placeholder="${escapeHtml('Database — миграции, SQL...')}"></textarea>` +
+                    `<textarea class="input textarea" data-config placeholder="${escapeHtml('Config — новые параметры...')}"></textarea>` +
+                    `<textarea class="input textarea" data-other placeholder="${escapeHtml('Другое — что ещё важно...')}"></textarea>` +
                     '<div class="modal-copy-actions">' +
                     '<button type="button" class="btn btn-secondary" data-generate-btn>Сгенерировать</button>' +
                     '</div>' +
@@ -1643,12 +1699,22 @@
                     '<div class="modal-copy-actions hidden" id="deploy-instruction-copy-actions">' +
                     '<button type="button" class="btn btn-secondary" data-copy-result-btn>Скопировать</button>' +
                     '</div>' +
+                    '</div>' +
                     '</div>',
                 [
                     { label: 'Отмена', value: false },
                     { label: 'Готово', primary: true, value: true },
                 ],
                 (bodyEl) => {
+                    prLinkInput = bodyEl.querySelector('[data-pr-link]');
+                    prLinkInput.value = sessionStorage.getItem(prLinkStorageKey()) || '';
+                    databaseInput = bodyEl.querySelector('[data-database]');
+                    configInput = bodyEl.querySelector('[data-config]');
+                    otherInput = bodyEl.querySelector('[data-other]');
+                    databaseInput.value = sessionStorage.getItem(deployNoteStorageKey('database')) || '';
+                    configInput.value = sessionStorage.getItem(deployNoteStorageKey('config')) || '';
+                    otherInput.value = sessionStorage.getItem(deployNoteStorageKey('other')) || '';
+
                     bodyEl.querySelector('[data-copy-btn]').addEventListener('click', async () => {
                         await copyText(SKILL_COMMIT_COMMAND);
                         notifyCopied(`команда «${SKILL_COMMIT_COMMAND}»`);
@@ -1656,16 +1722,20 @@
 
                     bodyEl.querySelector('[data-generate-btn]').addEventListener('click', async (e) => {
                         const buttonEl = e.currentTarget;
-                        const instruction = bodyEl.querySelector('[data-instruction]').value.trim();
-                        if (!instruction) {
-                            showToast('Опишите инструкцию выливки');
+                        const database = databaseInput.value.trim();
+                        const config = configInput.value.trim();
+                        const other = otherInput.value.trim();
+                        if (!database && !config && !other) {
+                            showToast('Опишите, что нужно сделать при выливке');
                             return;
                         }
 
                         setButtonLoading(buttonEl, true);
                         try {
                             const data = await apiCall('../api/generate_deploy_instruction.php', {
-                                instruction,
+                                database,
+                                config,
+                                other,
                             });
                             await copyText(data.instruction);
                             notifyCopied('инструкция выливки');
@@ -1685,9 +1755,21 @@
                     });
                 }
             );
-            if (confirmed) {
-                await markDone(item.id);
+            if (!confirmed) {
+                return;
             }
+
+            const prLink = prLinkInput ? prLinkInput.value.trim() : '';
+            if (prLink) {
+                sessionStorage.setItem(prLinkStorageKey(), prLink);
+            }
+            // Заметки о выливке ждёт пункт «Оставить описание в Jira» — он допишет их в
+            // одноимённые секции описания. Опустевшее поле убирает и заметку: иначе в описание
+            // попал бы уже отменённый пользователем пункт
+            rememberDeployNote('database', databaseInput);
+            rememberDeployNote('config', configInput);
+            rememberDeployNote('other', otherInput);
+            await markDone(item.id);
         },
 
         // Проверить PR через Claude — скопировать шаблон промпта со ссылкой на PR из шага «PR создан»,
@@ -1806,41 +1888,107 @@
         // PR`s переведены в Ready for review — отмечается сразу
         status_ready_for_review: (item) => markDone(item.id),
 
-        // Оставить описание в Jira — кнопки копирования (описание и ссылка на PR из шага
-        // «PR создан») можно нажимать повторно, отметка пункта — отдельной кнопкой «Готово»
+        // Оставить описание в Jira — блок секций правится прямо в модалке и пишется в описание
+        // задачи кнопкой рядом с копированием, отметка пункта — отдельной кнопкой «Готово»
         jira_description: async (item) => {
+            // Блок секций читается из самой Jira, а не из сохранённого tasks.description:
+            // описание могли изменить руками уже после открытия задачи, а этот же текст
+            // пользователь правит и пишет обратно.
+            // null — прочитать не удалось (Jira недоступна/не настроена), писать вслепую нельзя
+            let sectionsPresent = null;
+            // Текст, лежащий в описании задачи сейчас, — по нему считается, есть ли что сохранять
+            let sectionsText = null;
+            // Текст для поля: то же плюс дописанные ссылка на PR и заметки о выливке (их
+            // подставляет бэкенд, в самой Jira при этом ничего не меняется). Блока в описании
+            // ещё нет — пустой шаблон
+            let draftText = JIRA_DESCRIPTION_TEMPLATE;
+            const prLink = sessionStorage.getItem(prLinkStorageKey()) || '';
+            setItemLoading(item.id, true);
+            try {
+                const status = await apiCall('../api/jira_description_sections.php', {
+                    task_id: state.task.id,
+                    pr_link: prLink,
+                    // Заметки о базе и конфиге из шага «Закоммитить изменения» — бэкенд дописывает
+                    // их в одноимённые секции блока так же, как ссылку на PR, а «Другое» —
+                    // в скобках к последнему PR
+                    database: sessionStorage.getItem(deployNoteStorageKey('database')) || '',
+                    config: sessionStorage.getItem(deployNoteStorageKey('config')) || '',
+                    other: sessionStorage.getItem(deployNoteStorageKey('other')) || '',
+                });
+                sectionsPresent = Boolean(status.has_sections);
+                sectionsText = status.sections;
+                draftText = status.draft;
+            } catch (e) {
+                showToast(e.message || 'Не удалось прочитать описание задачи в Jira');
+            } finally {
+                setItemLoading(item.id, false);
+            }
+
             const confirmed = await showModal(
                 'Описание в Jira',
-                `<div class="snippet" style="font-family: inherit;">${JIRA_DESCRIPTION_HTML}</div>` +
-                    '<div class="modal-copy-actions">' +
+                '<div class="form-modal">' +
+                    '<textarea class="input textarea" data-sections spellcheck="false"></textarea>' +
+                    '<div class="modal-copy-actions modal-copy-actions--row">' +
                     '<button type="button" class="btn btn-secondary" data-copy-btn>Скопировать</button>' +
+                    '<button type="button" class="btn btn-secondary" data-save-btn></button>' +
                     // секцию Results заполняет скилл Claude Code — команда нужна только тем задачам,
                     // которые ведутся через него (флаг задачи, а не состав чек-листа: сам пункт им не скрыт)
                     (isTaskFlagEnabled(state.task, 'claude_code_skill_mode')
                         ? '<button type="button" class="btn btn-secondary" data-copy-results-btn>' +
-                          `${escapeHtml(SKILL_COMMIT_RESULTS_COMMAND)}</button>`
+                          '[Claude] Results</button>'
                         : '') +
-                    // ссылку на PR сохраняет пункт «Создать PR» — пока он отключён, копировать нечего
-                    (hasChecklistItem('pull_request')
-                        ? '<button type="button" class="btn btn-secondary" data-copy-pr-btn>Скопировать PR</button>'
-                        : '') +
-                    '</div>',
+                    '</div></div>',
                 [
                     { label: 'Отмена', value: false },
                     { label: 'Готово', primary: true, value: true },
                 ],
                 (bodyEl) => {
+                    const textareaEl = bodyEl.querySelector('[data-sections]');
+                    const saveButton = bodyEl.querySelector('[data-save-btn]');
+                    textareaEl.value = draftText;
+
+                    // То, что лежит в описании задачи прямо сейчас: пока текст в поле совпадает
+                    // с ним, писать в Jira нечего — кнопка недоступна и объясняет это подписью.
+                    // Дописанная в поле ссылка на PR от него отличается, то есть сохранять есть что
+                    let savedText = sectionsPresent ? sectionsText : null;
+                    const syncSaveButton = () => {
+                        const value = textareaEl.value.trim();
+                        const edited = savedText === null || value !== savedText.trim();
+                        saveButton.textContent = jiraDescriptionSaveLabel(sectionsPresent, edited);
+                        saveButton.disabled = sectionsPresent === null || !edited || value === '';
+                    };
+                    syncSaveButton();
+                    textareaEl.addEventListener('input', syncSaveButton);
+
                     bodyEl.querySelector('[data-copy-btn]').addEventListener('click', async () => {
-                        await copyRichText(JIRA_DESCRIPTION_HTML, JIRA_DESCRIPTION_PLAIN);
+                        const value = textareaEl.value;
+                        await copyRichText(jiraSectionsHtml(value), value);
                         notifyCopied('описание для Jira (с форматированием)');
+                    });
+                    saveButton.addEventListener('click', async (e) => {
+                        const button = e.currentTarget;
+                        const value = textareaEl.value.trim();
+                        setButtonLoading(button, true);
+                        try {
+                            await apiCall('../api/save_jira_description.php', {
+                                task_id: state.task.id,
+                                sections: value,
+                            });
+                            savedText = value;
+                            sectionsPresent = true;
+                            showToast('Пункты записаны в описание задачи');
+                        } catch (err) {
+                            showToast(err.message || 'Не удалось записать пункты в описание задачи');
+                        } finally {
+                            // setButtonLoading снимает disabled и возвращает прежнюю подпись —
+                            // и то, и другое пересчитывается по факту сохранения
+                            setButtonLoading(button, false);
+                            syncSaveButton();
+                        }
                     });
                     bodyEl.querySelector('[data-copy-results-btn]')?.addEventListener('click', async () => {
                         await copyText(SKILL_COMMIT_RESULTS_COMMAND);
                         notifyCopied(`команда «${SKILL_COMMIT_RESULTS_COMMAND}»`);
-                    });
-                    bodyEl.querySelector('[data-copy-pr-btn]')?.addEventListener('click', async () => {
-                        await copyText(sessionStorage.getItem(prLinkStorageKey()) || '');
-                        notifyCopied('ссылка на PR');
                     });
                 }
             );
@@ -1959,6 +2107,9 @@
         const data = await apiCall('../api/finish.php', { task_id: state.task.id });
         state.checklist = data.checklist;
         sessionStorage.removeItem(prLinkStorageKey());
+        sessionStorage.removeItem(deployNoteStorageKey('database'));
+        sessionStorage.removeItem(deployNoteStorageKey('config'));
+        sessionStorage.removeItem(deployNoteStorageKey('other'));
         renderChecklist();
         showToast('Чек-лист сброшен');
     });
@@ -1974,14 +2125,36 @@
 
     // ==================== Затреканное сегодня время (шапка) ====================
 
+    /** Признак «работа на сегодня закончена» — его ставит кнопка «Закончить бессрочно» в
+     * модалке трека времени. Хранится датой в localStorage: это состояние текущего дня, а не
+     * часть схемы задач (в БД ему делать нечего), и запись с прошлой датой сама перестаёт
+     * действовать — чистить ключ не нужно */
+    const DAY_FINISHED_KEY = 'devflow_day_finished';
+
+    function todayStamp() {
+        const now = new Date();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${now.getFullYear()}-${month}-${day}`;
+    }
+
+    function isDayFinished() {
+        return localStorage.getItem(DAY_FINISHED_KEY) === todayStamp();
+    }
+
+    function markDayFinished() {
+        localStorage.setItem(DAY_FINISHED_KEY, todayStamp());
+    }
+
     /** Единая точка применения свежего значения к индикатору — им пользуются и обычная
      * подгрузка, и быстрый трек времени (оба получают из Jira одно и то же число) */
     function applyTodayTimeSpent(seconds) {
         todayTimeLoadedAt = Date.now();
         todayTimeEl.classList.remove('hidden');
         todayTimeValueEl.textContent = formatClock(seconds);
-        // Норма за день выполнена — индикатор зеленеет и показывает галочку
-        todayTimeEl.classList.toggle('today-time--met', seconds >= DAILY_NORM_SECONDS);
+        // Норма за день выполнена (либо день закрыт кнопкой «Закончить бессрочно», даже с
+        // недобором часов) — индикатор зеленеет и показывает галочку
+        todayTimeEl.classList.toggle('today-time--met', seconds >= DAILY_NORM_SECONDS || isDayFinished());
         updateTrackTimeAvailability();
     }
 
@@ -2065,6 +2238,41 @@
         let closeModal = null;
         let addedMinutes = 0;
 
+        /**
+         * Общее для обеих кнопок ряда действий: затрекать выбранное ползунком время и закрыть
+         * модалку. `finishDay` — это «Закончить бессрочно»: работа на сегодня считается
+         * законченной независимо от нормы часов, поэтому поздравление показывается и при
+         * недоборе, а индикатор зеленеет до конца дня (см. isDayFinished). Время при этом
+         * уходит в Jira ровно то же, что и у «Затрекать»; ничего не добавили — запроса в Jira
+         * нет вообще (нулевой worklog Jira не принимает), закрывается только сам день.
+         */
+        async function trackAndClose(buttonEl, finishDay) {
+            setButtonLoading(buttonEl, true);
+            try {
+                if (addedMinutes > 0) {
+                    await submit(addedMinutes);
+                }
+                if (finishDay) {
+                    markDayFinished();
+                }
+                loadTodayTimeSpent(); // индикатор должен сразу учесть новый worklog
+
+                // Поздравление — только в момент первого за сегодня достижения нормы:
+                // если норма была выполнена уже до этого трека, считаем что поздравление
+                // уже показывалось, и дальнейший трек (сверхурочные) его не повторяет.
+                const totalSecondsToday = alreadySeconds + addedMinutes * 60;
+                const justReachedNorm = alreadySeconds < normSeconds && totalSecondsToday >= normSeconds;
+
+                closeModal(true);
+                if (finishDay || justReachedNorm) {
+                    showCongratsModal(totalSecondsToday);
+                }
+            } catch (e) {
+                showToast(e.message || 'Не удалось затрекать время в Jira');
+                setButtonLoading(buttonEl, false);
+            }
+        }
+
         return showModal(
             'Затрекать время 🕰',
             noteHtml +
@@ -2091,34 +2299,25 @@
                 '</div>' +
                 `<span class="worktime-edge">${escapeHtml(WORK_TIME.end)}</span>` +
                 '</div>',
+            // «Отмена» здесь последняя, а не первая как в остальных модалках: два финала трека
+            // стоят одной строкой, и «Отмена» отдельной строкой читается как итог выбора —
+            // под парой, а не над ней (см. .modal-actions--pair)
             [
-                { label: 'Отмена', value: null },
                 {
                     label: 'Затрекать',
                     primary: true,
                     keepOpen: true, // модалка закрывается вручную через close() только после успешного ответа Jira
-                    onClick: async (buttonEl) => {
-                        setButtonLoading(buttonEl, true);
-                        try {
-                            await submit(addedMinutes);
-                            loadTodayTimeSpent(); // индикатор должен сразу учесть новый worklog
-
-                            // Поздравление — только в момент первого за сегодня достижения нормы:
-                            // если норма была выполнена уже до этого трека, считаем что поздравление
-                            // уже показывалось, и дальнейший трек (сверхурочные) его не повторяет.
-                            const totalSecondsToday = alreadySeconds + addedMinutes * 60;
-                            const justReachedNorm = alreadySeconds < normSeconds && totalSecondsToday >= normSeconds;
-
-                            closeModal(true);
-                            if (justReachedNorm) {
-                                showCongratsModal(totalSecondsToday);
-                            }
-                        } catch (e) {
-                            showToast(e.message || 'Не удалось затрекать время в Jira');
-                            setButtonLoading(buttonEl, false);
-                        }
-                    },
+                    onClick: (buttonEl) => trackAndClose(buttonEl, false),
                 },
+                {
+                    // Единственная кнопка ряда, которой не нужно добавленное время: закрыть день
+                    // можно и с недобором часов, поэтому render() её не блокирует (он гасит
+                    // только .btn-primary)
+                    label: 'Закончить бессрочно',
+                    keepOpen: true,
+                    onClick: (buttonEl) => trackAndClose(buttonEl, true),
+                },
+                { label: 'Отмена', value: null },
             ],
             (bodyEl, close) => {
                 closeModal = close;
@@ -2243,14 +2442,22 @@
                     const primaryEl = modalActionsEl.querySelector('.btn-primary');
                     primaryEl.disabled = addedMinutes === 0;
 
-                    // Итог по центру ряда действий: сколько реально уйдёт в Jira (без обеда).
-                    // Вставляется здесь же — на момент onRender кнопок в DOM ещё нет.
+                    // Ряд действий: «Затрекать» и «Закончить бессрочно» — одно и то же действие
+                    // с разным финалом, поэтому они стоят в одну строку пополам, а не тремя
+                    // отдельными строками стандартного стека для 3+ кнопок (см. modal-actions--pair
+                    // и оговорку в CLAUDE.md). «Отмена» — своей строкой под ними.
+                    modalActionsEl.classList.remove('modal-actions--stacked');
+                    modalActionsEl.classList.add('modal-actions--pair');
+
+                    // Итог: сколько реально уйдёт в Jira (без обеда). Вставляется здесь же —
+                    // на момент onRender кнопок в DOM ещё нет; стоит первой строкой ряда, над
+                    // кнопками, а не между ними.
                     let summaryEl = modalActionsEl.querySelector('[data-worktime-summary]');
                     if (!summaryEl) {
                         summaryEl = document.createElement('span');
                         summaryEl.className = 'worktime-summary';
                         summaryEl.setAttribute('data-worktime-summary', '');
-                        modalActionsEl.insertBefore(summaryEl, primaryEl);
+                        modalActionsEl.insertBefore(summaryEl, modalActionsEl.firstChild);
                     }
                     summaryEl.textContent = `Будет затрекано: ${formatHoursMinutes(addedSeconds)}`;
                 }
@@ -2484,7 +2691,9 @@
     // Давность обновления пересчитывается в момент наведения — так подсказка всегда свежая
     // и не нужен таймер, тикающий в фоне ради текста, который почти никто не смотрит
     todayTimeEl.addEventListener('mouseenter', () => {
-        todayTimeEl.dataset.tooltip = `Затрекано времени (обновлено ${formatAgo(todayTimeLoadedAt)})`;
+        todayTimeEl.dataset.tooltip =
+            (isDayFinished() ? 'Работа на сегодня закончена · ' : '') +
+            `Затрекано времени (обновлено ${formatAgo(todayTimeLoadedAt)})`;
     });
 
     // ==================== Дашборд показателей (экран ввода ссылки) ====================

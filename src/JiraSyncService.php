@@ -50,7 +50,8 @@ final class JiraSyncService
             $issue['title'],
             $issue['description'],
             $issue['story_points_set'],
-            $issue['in_doing_status']
+            $issue['in_doing_status'],
+            $issue['pull_request_transition_available']
         );
 
         return $this->tasks->findById((int) $task['id']);
@@ -65,6 +66,32 @@ final class JiraSyncService
     public function updateStoryPoints(array $task, int $storyPoints): void
     {
         $this->client->updateStoryPoints($task['task_id'], $storyPoints);
+    }
+
+    /** Сырое описание задачи — по нему проверяется, что блок секций в него уже дописан */
+    public function getDescription(array $task): string
+    {
+        return $this->client->fetchDescriptionRaw($task['task_id']);
+    }
+
+    /** Записывает описание задачи целиком — Jira умеет только заменить поле, дописать в него нет */
+    public function setDescription(array $task, string $description): void
+    {
+        $this->client->updateDescription($task['task_id'], $description);
+    }
+
+    /**
+     * Дописывает текст в конец описания задачи, сохраняя уже написанное: описание читается
+     * прямо перед записью, потому что Jira умеет только заменить поле целиком.
+     */
+    public function appendToDescription(array $task, string $text): void
+    {
+        $current = rtrim($this->client->fetchDescriptionRaw($task['task_id']));
+
+        $this->client->updateDescription(
+            $task['task_id'],
+            $current === '' ? $text : $current . "\n\n" . $text
+        );
     }
 
     public function transitionToPullRequest(array $task): void

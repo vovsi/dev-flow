@@ -199,6 +199,72 @@ final class TaskService
         ];
     }
 
+    /**
+     * Блок стандартных секций (Results/Testing/…) для модалки — read-only: `sections` это то,
+     * что лежит в описании задачи прямо сейчас (null — блока там нет), `draft` — что показать
+     * в редактируемом поле: тот же блок (или пустой шаблон, если блока ещё нет) с дописанными
+     * пунктами, которые пользователь ввёл на предыдущих шагах чек-листа — $notes с ключами
+     * `pr_link`, `database`, `config` (каждый идёт отдельным номером в свою секцию) и `other`
+     * (уточнение в скобках к последнему PR); пустые значения ничего не дописывают. Читается из
+     * самой Jira, а не из tasks.description: описание могли изменить руками уже после открытия
+     * задачи, а этот текст пользователь правит в модалке и пишет обратно.
+     *
+     * Разделение на «в Jira» и «в поле» нужно самой модалке: по их несовпадению она понимает,
+     * что блок изменился и его есть смысл сохранять (дописанные пункты в Jira при этом не
+     * пишутся — сохранение остаётся отдельным действием пользователя).
+     *
+     * @param array<string, string> $notes
+     * @return array{sections: ?string, draft: string}
+     */
+    public function getJiraDescriptionSections(int $taskId, array $notes = []): array
+    {
+        $task = $this->tasks->findById($taskId);
+        if ($task === null) {
+            throw new RuntimeException('Задача не найдена');
+        }
+        if ($this->jiraSync === null) {
+            throw new RuntimeException('Интеграция с Jira не настроена — заполните config/params.ini');
+        }
+
+        $sections = JiraDescriptionService::extractSections($this->jiraSync->getDescription($task));
+
+        $draft = JiraDescriptionService::withItems(
+            $sections ?? JiraDescriptionService::template(),
+            [
+                JiraDescriptionService::SECTION_DATABASE => $notes['database'] ?? '',
+                JiraDescriptionService::SECTION_CONFIG => $notes['config'] ?? '',
+                JiraDescriptionService::SECTION_PULL_REQUESTS => $notes['pr_link'] ?? '',
+            ]
+        );
+
+        return [
+            'sections' => $sections,
+            // Заметка «Другое» дописывается после ссылки на PR: она уточняет уже поставленный
+            // выше пункт, а до этого последним номером был бы предыдущий PR
+            'draft' => JiraDescriptionService::withPullRequestNote($draft, $notes['other'] ?? ''),
+        ];
+    }
+
+    /**
+     * Пишет блок секций в описание задачи: если блок там уже есть — заменяет его целиком,
+     * если нет — дописывает в конец (см. JiraDescriptionService::replaceSections).
+     * Описание перечитывается прямо перед записью: в модалке оно было прочитано раньше, и за
+     * это время текст постановщика выше блока могли изменить.
+     */
+    public function saveJiraDescriptionSections(int $taskId, string $sections): void
+    {
+        $task = $this->tasks->findById($taskId);
+        if ($task === null) {
+            throw new RuntimeException('Задача не найдена');
+        }
+        if ($this->jiraSync === null) {
+            throw new RuntimeException('Интеграция с Jira не настроена — заполните config/params.ini');
+        }
+
+        $current = $this->jiraSync->getDescription($task);
+        $this->jiraSync->setDescription($task, JiraDescriptionService::replaceSections($current, $sections));
+    }
+
     /** Читает уже затреканное в Jira время (без побочных эффектов) — для отображения в модалке перед добавлением нового worklog */
     public function getTimeSpentSeconds(int $taskId): int
     {

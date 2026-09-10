@@ -63,11 +63,13 @@ final class TaskRepository
         string $title,
         ?string $description,
         bool $storyPointsSet,
-        bool $inDoingStatus
+        bool $inDoingStatus,
+        bool $pullRequestTransitionAvailable
     ): void {
         $stmt = $this->db->prepare(
             'UPDATE tasks SET title = :title, description = :description,
-                    story_points_set = :story_points_set, in_doing_status = :in_doing_status
+                    story_points_set = :story_points_set, in_doing_status = :in_doing_status,
+                    pull_request_transition_available = :pull_request_transition_available
              WHERE id = :id'
         );
         $stmt->execute([
@@ -75,6 +77,7 @@ final class TaskRepository
             'description' => $description,
             'story_points_set' => $storyPointsSet ? 1 : 0,
             'in_doing_status' => $inDoingStatus ? 1 : 0,
+            'pull_request_transition_available' => $pullRequestTransitionAvailable ? 1 : 0,
             'id' => $taskId,
         ]);
     }

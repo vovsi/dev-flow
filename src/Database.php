@@ -125,6 +125,9 @@ final class Database
         if (!in_array('waiting_for_deploy', $columns, true)) {
             $pdo->exec('ALTER TABLE tasks ADD COLUMN waiting_for_deploy INTEGER NOT NULL DEFAULT 0');
         }
+        if (!in_array('pull_request_transition_available', $columns, true)) {
+            $pdo->exec('ALTER TABLE tasks ADD COLUMN pull_request_transition_available INTEGER NOT NULL DEFAULT 1');
+        }
     }
 
     /**

@@ -17,6 +17,12 @@ CREATE TABLE IF NOT EXISTS tasks (
     -- Jira, поэтому пункт «Перевести в статус Doing» скрывается по реальному статусу, а не по
     -- отметке в чек-листе — см. ChecklistRepository::HIDE_IF_ALREADY_IN_DOING_STATUS_CODE.
     in_doing_status INTEGER NOT NULL DEFAULT 0,
+    -- в workflow задачи есть доступный переход в [atlassian].pull_request_status (обновляется
+    -- при каждой синхронизации, см. JiraSyncService::sync). Перехода нет — переводить задачу
+    -- нечем, и пункт «Перевести задачу в Pull Request» скрывается
+    -- (см. ChecklistRepository::HIDE_IF_NO_PULL_REQUEST_TRANSITION_CODE). Дефолт 1: без
+    -- настроенной Jira синхронизации нет, и правило не должно прятать пункт молча.
+    pull_request_transition_available INTEGER NOT NULL DEFAULT 1,
     git_branch TEXT DEFAULT NULL,
     -- режим «часть шагов делает скилл Claude Code» для этой конкретной задачи (раньше был
     -- глобальной настройкой [mode].claude_code_skill_mode в config/params.ini, теперь у каждой

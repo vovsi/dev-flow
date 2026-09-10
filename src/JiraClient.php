@@ -24,17 +24,20 @@ final class JiraClient
     }
 
     /**
-     * @return array{title: string, description: ?string, story_points_set: bool, in_doing_status: bool}
+     * @return array{title: string, description: ?string, story_points_set: bool, in_doing_status: bool,
+     *               pull_request_transition_available: bool}
      */
     public function fetchIssue(string $taskId): array
     {
         // expand=renderedFields отдаёт description готовым HTML вместо ADF/wiki-разметки —
         // так не нужно разбирать формат описания отдельно для Jira Cloud и Server.
+        // expand=transitions отдаёт доступные переходы тем же запросом — иначе для проверки
+        // перехода в Pull request пришлось бы дёргать /transitions при каждой синхронизации.
         $data = $this->request(
             'GET',
             '/rest/api/2/issue/' . rawurlencode($taskId)
                 . '?fields=summary,description,status,' . rawurlencode($this->storyPointsFieldId)
-                . '&expand=renderedFields',
+                . '&expand=renderedFields,transitions',
             null,
             "для задачи {$taskId}"
         );
@@ -44,6 +47,10 @@ final class JiraClient
             'description' => $data['renderedFields']['description'] ?? null,
             'story_points_set' => ($data['fields'][$this->storyPointsFieldId] ?? null) !== null,
             'in_doing_status' => $this->isDoingStatus((string) ($data['fields']['status']['name'] ?? '')),
+            'pull_request_transition_available' => $this->matchTransitionId(
+                is_array($data['transitions'] ?? null) ? $data['transitions'] : [],
+                [$this->pullRequestStatusName]
+            ) !== null,
         ];
     }
 
@@ -102,6 +109,32 @@ final class JiraClient
         );
     }
 
+    /**
+     * Сырое описание задачи — то же поле, что и в fetchIssue(), но без expand=renderedFields:
+     * renderedFields отдаёт HTML для показа, а обратно в Jira нужно писать исходную разметку.
+     */
+    public function fetchDescriptionRaw(string $taskId): string
+    {
+        $data = $this->request(
+            'GET',
+            '/rest/api/2/issue/' . rawurlencode($taskId) . '?fields=description',
+            null,
+            "при получении описания задачи {$taskId}"
+        );
+
+        return (string) ($data['fields']['description'] ?? '');
+    }
+
+    public function updateDescription(string $taskId, string $description): void
+    {
+        $this->request(
+            'PUT',
+            '/rest/api/2/issue/' . rawurlencode($taskId),
+            ['fields' => ['description' => $description]],
+            "при обновлении описания задачи {$taskId}"
+        );
+    }
+
     /** Переводит задачу в статус $pullRequestStatusName (например «Pull request») через Jira transitions API */
     public function transitionToPullRequest(string $taskId): void
     {
@@ -154,8 +187,23 @@ final class JiraClient
             null,
             "при получении переходов задачи {$taskId}"
         );
-        $transitions = is_array($data['transitions'] ?? null) ? $data['transitions'] : [];
 
+        return $this->matchTransitionId(
+            is_array($data['transitions'] ?? null) ? $data['transitions'] : [],
+            $statusNames
+        );
+    }
+
+    /**
+     * Ищет переход по названию целевого статуса в уже полученном списке переходов — общее
+     * для findTransitionId() (список запрошен отдельно) и fetchIssue() (список пришёл в
+     * expand=transitions вместе с полями задачи).
+     *
+     * @param list<array<string, mixed>> $transitions
+     * @param list<string> $statusNames
+     */
+    private function matchTransitionId(array $transitions, array $statusNames): ?string
+    {
         foreach ($statusNames as $statusName) {
             foreach ($transitions as $transition) {
                 // Сравниваем с названием целевого статуса (transition.to.name), а не с названием

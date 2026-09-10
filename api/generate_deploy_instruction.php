@@ -12,15 +12,19 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $input = readJsonInput();
-$instruction = trim((string) ($input['instruction'] ?? ''));
+// Инструкция вводится частями (база / конфиги / прочее), каждая по отдельности
+// необязательна — нужна хотя бы одна, иначе оформлять нечего
+$database = trim((string) ($input['database'] ?? ''));
+$config = trim((string) ($input['config'] ?? ''));
+$other = trim((string) ($input['other'] ?? ''));
 
-if ($instruction === '') {
+if ($database === '' && $config === '' && $other === '') {
     respond(['error' => 'Не указана инструкция выливки'], 422);
 }
 
 try {
     $service = new DeployInstructionService(LlmClientFactory::createFromConfig());
-    $deployInstruction = $service->generate($instruction);
+    $deployInstruction = $service->generateFromParts($database, $config, $other);
 } catch (\Throwable $e) {
     respond(['error' => $e->getMessage()], 502);
 }

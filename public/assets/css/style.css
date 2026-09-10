@@ -905,6 +905,35 @@ textarea.input {
     color: var(--text-primary);
 }
 
+/* Итог стоит первой строкой ряда действий (и в стеке, и в парном ряду модалки трека):
+   растягивать его по высоте не нужно, иначе он отъезжает от кнопок */
+.modal-actions--stacked .worktime-summary,
+.modal-actions--pair .worktime-summary {
+    flex: none;
+    margin-bottom: 2px;
+}
+
+/* Модалка трека времени — оговорка к стандарту «3+ кнопки = вертикальный стек»: «Затрекать» и
+   «Закончить бессрочно» это одно действие с разным финалом, поэтому они делят одну строку
+   пополам. «Отмена» (последняя кнопка ряда) остаётся на всю ширину строкой ниже — в один ряд с
+   парой она бы не влезла в окно 500×500. */
+.modal-actions--pair {
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.modal-actions--pair .btn {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+}
+
+/* Итог (span, первая строка) и «Отмена» (последняя кнопка ряда) — каждый своей строкой */
+.modal-actions--pair .worktime-summary,
+.modal-actions--pair .btn:last-of-type {
+    flex-basis: 100%;
+}
+
 /* Модалка быстрого трека светлее обычной — плоские цвета ползунка на полупрозрачной
    поверхности по умолчанию сливаются с фоном за модалкой. Только фон, тень остаётся общая.
    Шире стандартных 360px и с меньшими боковыми отступами: точность попадания по ползунку
@@ -962,9 +991,67 @@ html[data-theme="dark"] .modal:has(.worktime) {
     resize: none;
 }
 
+/* Части инструкции выливки (Database/Config/Другое, пункт «Закоммитить изменения») — равные по
+   смыслу поля внутри одного этапа, поэтому делят его высоту поровну. min-height занижен
+   намеренно: три поля плюс два этапа выше должны помещаться в окно 500×500 без прокрутки */
+.form-modal textarea[data-database],
+.form-modal textarea[data-config],
+.form-modal textarea[data-other] {
+    flex: 1 1 0;
+    min-height: 40px;
+    resize: none;
+}
+
+/* Однострочный ввод (ссылка на PR) — своей высоты, всю свободную забирают только textarea */
 .form-modal .modal-copy-actions,
+.form-modal input.input,
 .form-modal .snippet {
     flex: none;
+}
+
+/* Поле, которое в полноэкранной модалке и есть основной контент, а не ввод рядом с результатом
+   генерации (блок секций описания задачи, пункт «Оставить описание в Jira») — занимает всю
+   свободную высоту: текст правится целиком, и обрезанное поле пришлось бы скроллить построчно */
+.form-modal textarea[data-sections] {
+    flex: 1 1 auto;
+    min-height: 120px;
+    resize: none;
+}
+
+/* Этапы внутри полноэкранной модалки (пункт «Закоммитить изменения») — в отличие от .pr-step
+   содержимое этапа лежит под его заголовком, а не в один ряд с номером: в этапе может быть
+   многострочный ввод, кнопка генерации и её результат. Номер этапа рисуется тем же .pr-step-num */
+.form-step {
+    display: flex;
+    flex-direction: column;
+    flex: none;
+    gap: 6px;
+}
+
+/* Этап, который забирает всю свободную высоту модалки (в нём многострочный ввод);
+   min-height: 0, иначе flex-элемент не даёт полю сжаться и этапы выше выдавливаются */
+.form-step--grow {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.form-step-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.form-step-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* Внутри этапа отступы задаёт сам .form-step (gap), собственные отступы группы кнопок
+   рвали бы ритм заголовок → контент */
+.form-step .modal-copy-actions {
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
 /* Модалка «Задачи за сегодня» — во весь экран, тот же приём :has(), что и у
@@ -2037,7 +2124,8 @@ html[data-theme="dark"] .checklist-item:hover {
     border-radius: 10px;
 }
 
-.pr-step-num {
+.pr-step-num,
+.form-step-num {
     flex: none;
     width: 20px;
     height: 20px;
@@ -2201,6 +2289,14 @@ html[data-theme="dark"] .checklist-item:hover {
 .modal-copy-actions--row .btn {
     width: auto;
     flex: 1;
+}
+
+/* Полноэкранная модалка вмещает в ряд больше двух кнопок (пункт «Оставить описание в Jira» —
+   их там до четырёх), поэтому подписи в ней компактнее и переносятся внутри кнопки */
+.form-modal .modal-copy-actions--row .btn {
+    min-width: 0;
+    padding-inline: 8px;
+    font-size: 12.5px;
 }
 
 /* ==================== Тост-уведомление ==================== */

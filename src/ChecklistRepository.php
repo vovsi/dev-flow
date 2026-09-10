@@ -41,6 +41,16 @@ final class ChecklistRepository
     private const HIDE_IF_ALREADY_IN_DOING_STATUS_CODE = 'status_doing';
 
     /**
+     * Пункт скрывается, если в workflow задачи нет доступного перехода в статус
+     * [atlassian].pull_request_status (tasks.pull_request_transition_available, обновляется при
+     * каждой синхронизации по expand=transitions, см. JiraSyncService::sync) — переводить
+     * задачу нечем, и попытка привела бы только к ошибке «в Jira не найден переход в статус».
+     * Заодно пункт уходит, когда задача уже в этом статусе: перехода в текущий статус Jira
+     * не отдаёт.
+     */
+    private const HIDE_IF_NO_PULL_REQUEST_TRANSITION_CODE = 'status_pull_request';
+
+    /**
      * Пункт скрывается, если у задачи уже сохранено имя ветки (tasks.git_branch) — ветка
      * создана, и шаг не нужен. Правило по факту сохранённой ветки, а не по отметке пункта:
      * имя ветки живёт отдельно от чек-листа и остаётся у задачи после «Начать заново».
@@ -122,6 +132,7 @@ final class ChecklistRepository
         $conditions = ''
             . $this->hiddenByFlagCondition('t.story_points_set = 1', [self::HIDE_IF_STORY_POINTS_ALREADY_SET_CODE], 'sp_set', $params)
             . $this->hiddenByFlagCondition('t.in_doing_status = 1', [self::HIDE_IF_ALREADY_IN_DOING_STATUS_CODE], 'in_doing', $params)
+            . $this->hiddenByFlagCondition('t.pull_request_transition_available = 0', [self::HIDE_IF_NO_PULL_REQUEST_TRANSITION_CODE], 'no_pr_transition', $params)
             . $this->hiddenByFlagCondition("COALESCE(t.git_branch, '') != ''", [self::HIDE_IF_BRANCH_ALREADY_SET_CODE], 'branch_set', $params)
             . $this->hiddenByFlagCondition('t.claude_code_skill_mode = 1', self::CLAUDE_CODE_SKILL_MODE_HIDDEN_CODES, 'skill_hidden', $params)
             . $this->hiddenByFlagCondition('t.claude_code_skill_mode = 0', self::CLAUDE_CODE_SKILL_MODE_ONLY_CODES, 'skill_only', $params)

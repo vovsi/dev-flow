@@ -1,6 +1,7 @@
 <?php
 
 use App\Config;
+use App\JiraDescriptionService;
 
 require_once __DIR__ . '/../src/bootstrap.php';
 
@@ -266,7 +267,10 @@ $assetVersion = static function (string $relativePath): string {
         workTime: <?= json_encode($workTime, JSON_ENCODE_FLAGS) ?>,
         reviewSkipMigrationRepos: <?= json_encode($reviewSkipMigrationRepos, JSON_ENCODE_FLAGS) ?>,
         reviewDocLinks: <?= json_encode($reviewDocLinks, JSON_ENCODE_FLAGS | JSON_FORCE_OBJECT) ?>,
-        checklistStrictOrder: <?= json_encode($checklistStrictOrder, JSON_ENCODE_FLAGS) ?>
+        checklistStrictOrder: <?= json_encode($checklistStrictOrder, JSON_ENCODE_FLAGS) ?>,
+        // Шаблон блока секций описания задачи — из того же PHP-кода, который пишет его в Jira,
+        // чтобы у фронта не завёлся второй, разъезжающийся с ним список секций
+        jiraDescriptionTemplate: <?= json_encode(JiraDescriptionService::template(), JSON_ENCODE_FLAGS) ?>
     };
 </script>
 <script src="assets/js/app.js?v=<?= $assetVersion('assets/js/app.js') ?>"></script>
