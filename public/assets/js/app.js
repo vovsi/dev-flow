@@ -1915,9 +1915,15 @@
                     config: sessionStorage.getItem(deployNoteStorageKey('config')) || '',
                     other: sessionStorage.getItem(deployNoteStorageKey('other')) || '',
                 });
-                sectionsPresent = Boolean(status.has_sections);
-                sectionsText = status.sections;
+                // draft приходит с дописанными пунктами и когда Jira недоступна (available:
+                // false) — иначе введённая ссылка на PR и заметки о выливке пропадали бы из
+                // поля вместе с ошибкой чтения. Недоступность запрещает только запись в описание
                 draftText = status.draft;
+                sectionsPresent = status.available ? Boolean(status.has_sections) : null;
+                sectionsText = status.sections;
+                if (!status.available) {
+                    showToast(status.error || 'Не удалось прочитать описание задачи в Jira');
+                }
             } catch (e) {
                 showToast(e.message || 'Не удалось прочитать описание задачи в Jira');
             } finally {

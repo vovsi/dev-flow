@@ -17,13 +17,44 @@ final class JiraDescriptionService
     public const SECTION_CONFIG = 'Config';
     public const SECTION_PULL_REQUESTS = 'Pull Requests';
 
-    /** Секции блока; порядок = порядок в описании задачи */
+    /**
+     * Разбиение текста на строки. Именно перечисление переводов строки, а не `\R`: без
+     * модификатора `u` тот считает переводом строки и одиночный байт 0x85 (U+0085 NEL) —
+     * а это второй байт, например, кириллической «х» (D1 85), то есть описание с ней
+     * разрезалось посреди символа и ответ эндпоинта перестал быть валидным UTF-8 (json_encode
+     * отдавал false → пустое тело ответа). Модификатор `u` тут не годится: описание приходит
+     * из Jira как есть, и на битой последовательности preg_* вернул бы false вместо текста.
+     */
+    private const LINE_BREAK_PATTERN = '~\r\n|\r|\n~';
+
+    /**
+     * Пункт нумерованного списка внутри секции: отступ, маркер, текст. Маркеров два вида, и
+     * оба реальные — «#» пишет наш шаблон (template()) и сама wiki-разметка Jira, а «1. »
+     * остаётся в описаниях задач, блок которых был дописан прежним шаблоном. Понимать нужно
+     * оба: иначе чужой список не считался бы списком вовсе, и введённая ссылка на PR вставала
+     * бы отдельной строкой рядом с ним.
+     */
+    private const ITEM_LINE_PATTERN = '~^(\s*)(\d+[.)]|#+)\s*(.*)$~';
+
+    /** Текст «пустого» пункта: шаблонный пункт без текста и прочерк вместо него */
+    private const ITEM_PLACEHOLDERS = ['', '-', '--', '–', '—'];
+
+    /** Пункт, который целиком состоит из одной ссылки, — такой оформляется smart-link'ом */
+    private const ITEM_URL_PATTERN = '~^https?://\S+$~';
+
+    /**
+     * Секции блока и «пустой» пункт каждой; порядок = порядок в описании задачи. Маркер
+     * пункта — «#», нумерованный список самой wiki-разметки Jira: так блок выглядит в задаче
+     * так же, как если бы список набрали в Jira руками. У Database и Config вместо пустого
+     * пункта прочерк — в этих секциях чаще всего писать нечего, и прочерк отличает «ничего
+     * делать не надо» от «забыли заполнить».
+     */
     private const SECTIONS = [
-        'Results',
-        'Testing',
-        self::SECTION_DATABASE,
-        self::SECTION_CONFIG,
-        self::SECTION_PULL_REQUESTS,
+        'Results' => '# ',
+        'Testing' => '# ',
+        self::SECTION_DATABASE => '# -',
+        self::SECTION_CONFIG => '# -',
+        self::SECTION_PULL_REQUESTS => '#',
     ];
 
     /**
@@ -34,11 +65,11 @@ final class JiraDescriptionService
     public static function template(): string
     {
         $blocks = [];
-        foreach (self::SECTIONS as $section) {
-            $blocks[] = "*{$section}*\n1. ";
+        foreach (self::SECTIONS as $section => $item) {
+            $blocks[] = "*{$section}*\n\n{$item}";
         }
 
-        return implode("\n\n", $blocks);
+        return implode("\n\n\n", $blocks);
     }
 
     /** Есть ли секции блока в описании задачи */
@@ -82,7 +113,7 @@ final class JiraDescriptionService
      * Блок секций с дописанными пунктами: карта «секция → текст пункта(ов)», введённый в других
      * шагах чек-листа (ссылка на PR, что сделать с базой, что с конфигом). Каждая непустая
      * строка текста становится отдельным номером списка своей секции: под первым номером ещё
-     * ничего нет (шаблонный «1. » или блока в описании не было вовсе) — пункт встаёт туда, под
+     * ничего нет (пустой пункт шаблона или блока в описании не было вовсе) — пункт встаёт туда, под
      * ним уже что-то стоит — пункт добавляется следующим номером ниже, не затирая его (у
      * мультирепо-задачи в секции несколько PR, у выливки — несколько шагов). Уже упомянутый в
      * секции текст второй раз не добавляется, секции нет в блоке — блок не меняется.
@@ -98,7 +129,7 @@ final class JiraDescriptionService
             return $sections;
         }
 
-        $lines = preg_split('~\R~', $sections) ?: [];
+        $lines = preg_split(self::LINE_BREAK_PATTERN, $sections) ?: [];
         foreach ($itemsBySection as $section => $text) {
             foreach (self::splitItems($text) as $item) {
                 $lines = self::appendToSection($lines, $section, $item);
@@ -118,8 +149,8 @@ final class JiraDescriptionService
     private static function splitItems(string $text): array
     {
         $items = [];
-        foreach (preg_split('~\R~', $text) ?: [] as $line) {
-            $line = trim(preg_replace('~^\s*\d+[.)]\s*~', '', $line) ?? $line);
+        foreach (preg_split(self::LINE_BREAK_PATTERN, $text) ?: [] as $line) {
+            $line = trim(preg_replace('~^\s*(?:\d+[.)]|#+)\s*~', '', $line) ?? $line);
             if ($line !== '') {
                 $items[] = $line;
             }
@@ -129,7 +160,23 @@ final class JiraDescriptionService
     }
 
     /**
-     * Строки блока с дописанным в нумерованный список секции пунктом (правила — см. withItems).
+     * Пункт в том виде, в каком он пишется в описание: ссылка — wiki-разметкой smart-link
+     * (`[url|url|smart-link]`), тем же способом, каким Jira сама оформляет вставленную в
+     * описание ссылку. Иначе дописанная нами ссылка на PR оставалась в списке сырым текстом
+     * рядом с уже оформленными — и выглядела, и раскрывалась в задаче по-другому. Текст, не
+     * являющийся одной ссылкой (заметки о базе и конфиге, уже оформленная ссылка), не меняется.
+     */
+    private static function formatItem(string $item): string
+    {
+        return preg_match(self::ITEM_URL_PATTERN, $item) === 1
+            ? "[{$item}|{$item}|smart-link]"
+            : $item;
+    }
+
+    /**
+     * Строки блока с дописанным в список секции пунктом (правила — см. withItems). Маркер
+     * нового пункта — тот, которым секция уже размечена: «#» у wiki-списка Jira, следующий
+     * номер у списка вида «1. ».
      *
      * @param string[] $lines
      * @return string[]
@@ -143,30 +190,49 @@ final class JiraDescriptionService
 
         $end = self::sectionEndIndex($lines, $header + 1);
         $firstEmpty = null;
-        $lastNumbered = null;
+        $firstEmptyLine = '';
+        $lastItem = null;
+        $indent = '';
+        $wikiMarker = null;
         $maxNumber = 0;
         for ($i = $header + 1; $i < $end; $i++) {
-            if (!preg_match('~^\s*(\d+)[.)]\s*(.*)$~', $lines[$i], $matches)) {
+            if (!preg_match(self::ITEM_LINE_PATTERN, $lines[$i], $matches)) {
                 continue;
             }
             // Пункт уже в секции — второй раз его добавлять некуда
             if (str_contains($lines[$i], $item)) {
                 return $lines;
             }
-            $lastNumbered = $i;
-            $maxNumber = max($maxNumber, (int) $matches[1]);
-            if ($firstEmpty === null && trim($matches[2]) === '') {
+            $lastItem = $i;
+            $indent = $matches[1];
+            if (str_starts_with($matches[2], '#')) {
+                // Новый пункт повторяет уже использованный в секции wiki-маркер, иначе один
+                // список в описании оказался бы размечен двумя способами
+                $wikiMarker ??= $matches[2];
+            } else {
+                $maxNumber = max($maxNumber, (int) $matches[2]);
+            }
+            if ($firstEmpty === null && in_array(trim($matches[3]), self::ITEM_PLACEHOLDERS, true)) {
                 $firstEmpty = $i;
+                $firstEmptyLine = $matches[1] . $matches[2] . ' ' . self::formatItem($item);
             }
         }
 
+        // Пустой пункт заполняется, а не дублируется: строка собирается заново, потому что
+        // заглушку-прочерк нужно заменить, а не дописать после неё
         if ($firstEmpty !== null) {
-            $lines[$firstEmpty] = rtrim($lines[$firstEmpty]) . ' ' . $item;
+            $lines[$firstEmpty] = $firstEmptyLine;
 
             return $lines;
         }
 
-        array_splice($lines, ($lastNumbered ?? $header) + 1, 0, [($maxNumber + 1) . '. ' . $item]);
+        $marker = $wikiMarker ?? ($maxNumber + 1) . '.';
+        array_splice(
+            $lines,
+            ($lastItem ?? $header) + 1,
+            0,
+            [$indent . $marker . ' ' . self::formatItem($item)]
+        );
 
         return $lines;
     }
@@ -184,7 +250,7 @@ final class JiraDescriptionService
             return $sections;
         }
 
-        $lines = preg_split('~\R~', $sections) ?: [];
+        $lines = preg_split(self::LINE_BREAK_PATTERN, $sections) ?: [];
         $header = self::sectionHeaderIndex($lines, self::SECTION_PULL_REQUESTS);
         if ($header === null) {
             return $sections;
@@ -193,7 +259,11 @@ final class JiraDescriptionService
         $end = self::sectionEndIndex($lines, $header + 1);
         $last = null;
         for ($i = $header + 1; $i < $end; $i++) {
-            if (!preg_match('~^\s*\d+[.)]~', $lines[$i])) {
+            // Пустой пункт (шаблонный или прочерк) за PR не считается: скобки с уточнением
+            // без самой ссылки бессмысленны
+            if (!preg_match(self::ITEM_LINE_PATTERN, $lines[$i], $matches)
+                || in_array(trim($matches[3]), self::ITEM_PLACEHOLDERS, true)
+            ) {
                 continue;
             }
             if (str_contains($lines[$i], $note)) {
@@ -218,7 +288,7 @@ final class JiraDescriptionService
     private static function inlineNote(string $text): string
     {
         $parts = [];
-        foreach (preg_split('~\R~', $text) ?: [] as $line) {
+        foreach (preg_split(self::LINE_BREAK_PATTERN, $text) ?: [] as $line) {
             $line = trim($line);
             if ($line !== '') {
                 $parts[] = $line;
@@ -284,7 +354,7 @@ final class JiraDescriptionService
     {
         $names = $section !== null ? preg_quote($section, '~') : implode('|', array_map(
             static fn (string $name): string => preg_quote($name, '~'),
-            self::SECTIONS
+            array_keys(self::SECTIONS)
         ));
         $wrap = '(?:<[^>]+>|h[1-6]\.|[ \t\r*_#|-])*';
 

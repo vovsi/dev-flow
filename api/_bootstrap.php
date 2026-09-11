@@ -60,11 +60,21 @@ function readJsonInput(): array
     return is_array($data) ? $data : [];
 }
 
-/** Отправляет JSON-ответ и завершает скрипт */
+/**
+ * Отправляет JSON-ответ и завершает скрипт.
+ *
+ * JSON_INVALID_UTF8_SUBSTITUTE обязателен: без него одна битая байтовая последовательность в
+ * данных (текст приходит из Jira и от пользователя) заставляла json_encode вернуть false, и
+ * браузер получал 200 с пустым телом — то есть невнятную ошибку разбора JSON вместо ответа.
+ * Лучше отдать ответ с символом-заменителем на месте испорченного байта, чем не отдать ничего.
+ */
 function respond(array $payload, int $status = 200): never
 {
     http_response_code($status);
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode(
+        $payload,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE
+    );
     exit;
 }
 

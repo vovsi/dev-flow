@@ -213,8 +213,13 @@ final class TaskService
      * что блок изменился и его есть смысл сохранять (дописанные пункты в Jira при этом не
      * пишутся — сохранение остаётся отдельным действием пользователя).
      *
+     * Недоступность Jira не считается ошибкой: блок всё равно собирается из шаблона с уже
+     * введёнными пунктами (иначе пользователь терял бы и ссылку на PR, и заметки о выливке —
+     * ввести их больше негде), только `available` приходит false, и записывать такой блок в
+     * описание нельзя — неизвестно, заменять там блок или дописывать.
+     *
      * @param array<string, string> $notes
-     * @return array{sections: ?string, draft: string}
+     * @return array{available: bool, error: ?string, sections: ?string, draft: string}
      */
     public function getJiraDescriptionSections(int $taskId, array $notes = []): array
     {
@@ -222,11 +227,17 @@ final class TaskService
         if ($task === null) {
             throw new RuntimeException('Задача не найдена');
         }
-        if ($this->jiraSync === null) {
-            throw new RuntimeException('Интеграция с Jira не настроена — заполните config/params.ini');
-        }
 
-        $sections = JiraDescriptionService::extractSections($this->jiraSync->getDescription($task));
+        $sections = null;
+        $error = null;
+        try {
+            if ($this->jiraSync === null) {
+                throw new RuntimeException('Интеграция с Jira не настроена — заполните config/params.ini');
+            }
+            $sections = JiraDescriptionService::extractSections($this->jiraSync->getDescription($task));
+        } catch (Throwable $e) {
+            $error = $e->getMessage();
+        }
 
         $draft = JiraDescriptionService::withItems(
             $sections ?? JiraDescriptionService::template(),
@@ -238,6 +249,8 @@ final class TaskService
         );
 
         return [
+            'available' => $error === null,
+            'error' => $error,
             'sections' => $sections,
             // Заметка «Другое» дописывается после ссылки на PR: она уточняет уже поставленный
             // выше пункт, а до этого последним номером был бы предыдущий PR

@@ -44,7 +44,12 @@ try {
     respond(['error' => $e->getMessage()], 502);
 }
 
+// Недоступная Jira не 502: draft с уже введёнными пунктами (ссылка на PR, заметки о выливке)
+// нужен пользователю и без неё — хотя бы чтобы скопировать блок руками. Модалка по
+// available: false лишь запрещает запись в описание, см. TaskService
 respond([
+    'available' => $sections['available'],
+    'error' => $sections['error'],
     'has_sections' => $sections['sections'] !== null,
     'sections' => $sections['sections'],
     'draft' => $sections['draft'],
