@@ -329,7 +329,11 @@ task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id)
   без них `JiraSyncService::createFromConfig()` возвращает `null`, и все Jira-фичи молча
   отключаются, не ломая открытие задачи), `story_points_field` (ID кастомного поля Story Points,
   по умолчанию `customfield_10016`), `doing_status`/`pull_request_status` (названия статусов
-  для переходов, по умолчанию `Doing`/`Pull request`), `blocked_status` (название статуса для
+  для переходов, по умолчанию `Doing`/`Pull request`; **оба — списки через запятую**
+  (`Config::atlassianDoingStatuses()`/`Config::atlassianPullRequestStatuses()`, тот же
+  `commaList()`): у одного и того же по смыслу статуса в разных workflow разные названия
+  («Pull request, Code Review»), используется первый переход, реально найденный в workflow
+  задачи), `blocked_status` (название статуса для
   показателя дашборда «Blocked», по умолчанию `Blocked`; в него ничего не переводится, поэтому
   совпадать должно с названием **статуса**, а не перехода).
 - **`[worktime]`** — `start`/`end`/`daily_hours`/`lunch_start`/`lunch_end`, разбор и дефолты —
@@ -558,8 +562,8 @@ task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id)
   переход вообще есть.** Флаг `tasks.pull_request_transition_available` обновляется при каждой
   синхронизации: `JiraClient::fetchIssue()` просит переходы тем же запросом
   (`expand=renderedFields,transitions`) и ищет среди них переход в
-  `Config::atlassianPullRequestStatus()` тем же сравнением по `to.name`, каким его ищет сам
-  перевод статуса (общий приватный `matchTransitionId()` — отдельного запроса к
+  `Config::atlassianPullRequestStatuses()` тем же сравнением по `to.name`, каким его ищет сам
+  перевод статуса (список названий, первое совпадение и выигрывает) (общий приватный `matchTransitionId()` — отдельного запроса к
   `/transitions` при синхронизации не появилось). Фильтрация — в SQL
   `ChecklistRepository::getStatusesForTask()` (`HIDE_IF_NO_PULL_REQUEST_TRANSITION_CODE`).
   Смысл: в части workflow перехода в Pull request нет, и клик по пункту мог закончиться только
@@ -641,7 +645,8 @@ task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id)
 | `pr_description` | Указать описание PR | GitHub | Два многострочных поля: «Опишите что сделали» (обязательное, предзаполняется описанием из пункта `code_written`) и «Инструкция выливки» (необязательное) → «Сгенерировать» отправляет оба в `api/generate_pr_description.php` → `PrDescriptionService`: нейронка заполняет шаблон описания PR команды (`## What` / `## How` / `## Jira` / `## Checklist` / `## Screenshots / examples` / `## Breaking changes`, чек-бокс-лист копируется как есть — не отмеченным, его отмечает автор), а если инструкция выливки введена — её оформленный блок (`DeployInstructionService`, `### ❗ **ВАЖНО** ❗` / `**Перед мерджем сделать следующее:**` / `<инструкция>`; эмодзи вместо цветного текста, потому что GitHub вырезает inline-стили из описания PR) дописывается в конец через пустую строку. Инструкция не введена — блока в описании нет вообще, второго запроса к нейронке тоже. Результат копируется в буфер сразу и показывается в теле окна с отдельной кнопкой повторного копирования (генерацию можно повторять) → «Готово» отмечает пункт. После «Готово» — вопрос «Есть ещё один проект?»: при «Да» откатывает пункты `code_written`/`pull_request`/`claude_review`/`pr_description` (`rewindTo('code_written')`, сам `pr_description` при этом не отмечается) для повторного цикла коммит→PR→ревью→описание PR по второму репозиторию мультирепо-задачи |
 | `status_ready_for_review` | PR`s переведены в Ready for review | GitHub | Отмечается сразу по клику — без модалки и без сетевого запроса (`markDone(item.id)`) |
 | `jira_description` | Оставить описание в Jira | Jira | Перед открытием модалки читает блок секций из описания задачи в Jira (`api/jira_description_sections.php`, индикация — `setItemLoading`), передавая туда ссылку на PR и заметки о базе/конфиге/прочем из `sessionStorage` (их вводят на шаге `skill_commit`). Блок показывается в редактируемом поле (`data-sections`) уже со вставленными ссылкой на PR и этими заметками — в секциях `Pull Requests`, `Database` и `Config` соответственно, а «Другое» в скобках у последнего PR (ответ `draft`, см. эндпоинт, `JiraDescriptionService::withItems()` и `withPullRequestNote()`): он уже есть в описании — подтягивается его текущий текст, ещё нет — пустой шаблон; Jira недоступна — тот же шаблон, но **с дописанными пунктами** (ответ `available: false`, см. эндпоинт: терять введённую ссылку на PR из-за недоступного чтения описания нельзя), и только при совсем упавшем запросе — `JIRA_DESCRIPTION_TEMPLATE` с фронта (приходит с бэка). Само поле сравнивается не с показанным текстом, а с тем, что лежит в Jira (ответ `sections`), поэтому дописанные пункты сразу делают кнопку записи доступной — в Jira она попадает только по явному сохранению. Кнопки: «Скопировать» (копирует то, что в поле, с форматированием через `ClipboardItem` — wiki-жирный переводится в `<b>` функцией `jiraSectionsHtml()`), запись блока в описание задачи (`api/save_jira_description.php`) — её подпись и доступность считает `syncSaveButton()`: «Добавить в описание задачи», если блока в описании нет; «Пункты уже в описании» (недоступна), пока текст поля совпадает с тем, что в Jira; «Сохранить в описании», как только текст поправили, — так правки описания вносятся прямо из модалки, а не копипастом в Jira, «[Claude] Results» (копирует `SKILL_COMMIT_RESULTS_COMMAND` в `app.js` — команду скилла, который заполнит секцию Results; кнопка есть только пока у задачи включён флаг `claude_code_skill_mode`, проверка через `isTaskFlagEnabled()`, а не `hasChecklistItem()`: сам пункт этим режимом не скрыт) — ни одна не отмечает пункт, можно повторять → «Готово» в панели действий отмечает |
-| `status_pull_request` | Перевести задачу в Pull Request | Jira | Переводит задачу в Jira в статус из `config/params.ini` (`atlassian.pull_request_status`, по умолчанию «Pull request») через `api/transition_pull_request.php` → отмечается только при успешном переходе в Jira (тот же паттерн, что у `story_points`/`update_story_points.php`). Пункт скрыт, если в workflow задачи нет перехода в этот статус (см. бизнес-правила) |
+| `status_pull_request` | Перевести задачу в Pull Request | Jira | Переводит задачу в Jira в статус из `config/params.ini` (`atlassian.pull_request_status`, по умолчанию «Pull request»; в конфиге можно перечислить
+несколько названий через запятую — берётся первое, найденное в workflow задачи) через `api/transition_pull_request.php` → отмечается только при успешном переходе в Jira (тот же паттерн, что у `story_points`/`update_story_points.php`). Пункт скрыт, если в workflow задачи нет перехода в этот статус (см. бизнес-правила) |
 | `time_tracking` | Затрекать время | Jira | Прочитать затреканное за сегодня (`api/today_time_spent.php`) и по этой задаче (`api/get_time_spent.php`, оба read-only) → открыть **ту же модалку с ползунком, что и кружок быстрого трека** (`openQuickTrackModal()`, строкой сверху затреканное в задачу) → добавить worklog в Jira (`api/log_time.php`) → отметить (тот же паттерн, что у `story_points`/`status_pull_request`). Если это первый трек, доводящий сумму за день до нормы — см. модалку поздравления в бизнес-правилах. Вторая кнопка модалки, «Закончить бессрочно», закрывает рабочий день независимо от нормы (там же в бизнес-правилах) |
 | `send_pr` | PR отправлен ревьюверу | Telegram | Отмечается сразу по клику — без модалки и без сетевого запроса (`markDone(item.id)`), как `status_ready_for_review`; попутно копирует в буфер ссылку на PR из `sessionStorage` (её сразу нужно отправить ревьюверу в мессенджер), если она там есть |
 
@@ -939,7 +944,8 @@ activity-индикатор должен быть маленьким и неза
 Read-only (`DashboardService::metrics()`): считает числовые показатели дашборда на экране ввода
 ссылки. Сейчас их два, оба про «задачи на мне, висящие в статусе дольше порога рабочих часов» и
 оба считаются одним приватным `stuckInStatus()`:
-- `stale_pull_requests` — статус `[atlassian].pull_request_status`, порог
+- `stale_pull_requests` — статус `[atlassian].pull_request_status` (**первый** из списка:
+  JQL и changelog ищут конкретное название статуса, а не любое из), порог
   `[dashboard].stale_pull_request_hours` (по умолчанию 24 ч);
 - `stale_blocked` — статус `[atlassian].blocked_status` (по умолчанию `Blocked`), порог
   `[dashboard].stale_blocked_hours` (по умолчанию 24 ч).
@@ -1220,7 +1226,8 @@ Story Points в самой задаче Jira (`JiraSyncService::updateStoryPoint
 Запрос: `{ "task_id": 1, "checklist_id": 3 }`
 
 Логика (`TaskService::transitionToPullRequest`): аналогично `transition_doing.php`, статус — из
-`atlassian.pull_request_status` (по умолчанию «Pull request»). 422/502 — та же схема.
+`atlassian.pull_request_status` (по умолчанию «Pull request»; список названий через запятую —
+первое найденное в workflow). 422/502 — та же схема.
 
 Ответ: `{ "task": {...}, "checklist": [...] }`
 

@@ -316,6 +316,19 @@ curl -s -u "you@example.com:YOUR_TOKEN" \
 ```
 
 Use the `transitions[].name` (or `.to.name`) values. Defaults are `Doing` and `Pull request`.
+
+Both keys accept a **comma-separated list** of names in priority order — useful when the same
+status is worded differently across your team's Jira projects:
+
+```ini
+doing_status = "Doing, В работе"
+pull_request_status = "Pull request, Code Review"
+```
+
+The first name that actually exists among the task's transitions is the one used. Only the
+first name of `pull_request_status` is used by the "Зависшие PR" dashboard tile (the metric is
+counted for one status name).
+
 `doing_status` is also matched against the task's **current** status: while the task already
 sits in one of those statuses, the Перевести в статус Doing *(transition to Doing)* item is
 hidden from the checklist. `pull_request_status` is matched against the transitions the task's
@@ -561,7 +574,8 @@ hanging PR are different kinds of waiting. Only working hours count: the weekday
 show ("Зависшие PR > 24 ч", "Blocked > 24 ч"), so changing them here changes the interface too.
 
 The status names themselves come from `[atlassian]` — `pull_request_status` and `blocked_status`
-(see [1. Jira](#1-jira--atlassian)); they must match the status names in your Jira exactly.
+(see [1. Jira](#1-jira--atlassian)); they must match the status names in your Jira exactly. If
+`pull_request_status` lists several names, this tile counts only the first one.
 
 ---
 

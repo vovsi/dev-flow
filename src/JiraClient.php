@@ -17,7 +17,8 @@ final class JiraClient
         private readonly string $email,
         private readonly string $apiToken,
         private readonly string $storyPointsFieldId = 'customfield_10016',
-        private readonly string $pullRequestStatusName = 'Pull request',
+        /** @var list<string> */
+        private readonly array $pullRequestStatusNames = ['Pull request'],
         /** @var list<string> */
         private readonly array $doingStatusNames = ['Doing'],
     ) {
@@ -49,7 +50,7 @@ final class JiraClient
             'in_doing_status' => $this->isDoingStatus((string) ($data['fields']['status']['name'] ?? '')),
             'pull_request_transition_available' => $this->matchTransitionId(
                 is_array($data['transitions'] ?? null) ? $data['transitions'] : [],
-                [$this->pullRequestStatusName]
+                $this->pullRequestStatusNames
             ) !== null,
         ];
     }
@@ -135,13 +136,14 @@ final class JiraClient
         );
     }
 
-    /** Переводит задачу в статус $pullRequestStatusName (например «Pull request») через Jira transitions API */
+    /** Переводит задачу в первый найденный из статусов $pullRequestStatusNames (например «Pull request») через Jira transitions API */
     public function transitionToPullRequest(string $taskId): void
     {
-        $transitionId = $this->findTransitionId($taskId, [$this->pullRequestStatusName]);
+        $transitionId = $this->findTransitionId($taskId, $this->pullRequestStatusNames);
         if ($transitionId === null) {
+            $statusList = implode('», «', $this->pullRequestStatusNames);
             throw new RuntimeException(
-                "В Jira не найден переход в статус «{$this->pullRequestStatusName}» для задачи {$taskId}"
+                "В Jira не найден переход в статус «{$statusList}» для задачи {$taskId}"
             );
         }
 

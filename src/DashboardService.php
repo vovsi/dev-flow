@@ -45,7 +45,9 @@ final class DashboardService
 
         return new self(
             $jiraSync,
-            Config::atlassianPullRequestStatus(),
+            // Показатель считается по одному статусу (JQL и changelog ищут конкретное название),
+            // поэтому из списка [atlassian].pull_request_status берётся основной — первый
+            Config::atlassianPullRequestStatuses()[0],
             Config::atlassianBlockedStatus(),
             Config::stalePullRequestHours(),
             Config::staleBlockedHours(),

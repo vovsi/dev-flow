@@ -158,13 +158,20 @@ final class Config
         return $field !== '' ? $field : 'customfield_10016';
     }
 
-    /** Название статуса Jira для перехода по пункту «Перевести задачу в Pull Request». Не задано в конфиге — по умолчанию "Pull request" */
-    public static function atlassianPullRequestStatus(): string
+    /**
+     * Названия статусов Jira для перехода по пункту «Перевести задачу в Pull Request», в
+     * порядке приоритета — первый найденный в workflow задачи переход и будет использован.
+     * Формат тот же, что у doing_status («Pull request, Code Review», см. commaList()): у
+     * одного и того же по смыслу статуса в разных workflow разные названия. Не задано в
+     * конфиге — по умолчанию только "Pull request".
+     *
+     * @return list<string>
+     */
+    public static function atlassianPullRequestStatuses(): array
     {
-        $data = self::load();
-        $status = trim((string) ($data['atlassian']['pull_request_status'] ?? ''));
+        $statuses = self::commaList(self::load()['atlassian'] ?? [], 'pull_request_status');
 
-        return $status !== '' ? $status : 'Pull request';
+        return $statuses !== [] ? $statuses : ['Pull request'];
     }
 
     /** Название статуса Jira, задачи в котором считает показатель дашборда «Blocked». Не задано в конфиге — по умолчанию "Blocked" */

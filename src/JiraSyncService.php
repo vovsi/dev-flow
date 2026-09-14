@@ -35,7 +35,7 @@ final class JiraSyncService
                 $config['email'],
                 $config['api_token'],
                 Config::atlassianStoryPointsField(),
-                Config::atlassianPullRequestStatus(),
+                Config::atlassianPullRequestStatuses(),
                 Config::atlassianDoingStatuses()
             ),
             $tasks
