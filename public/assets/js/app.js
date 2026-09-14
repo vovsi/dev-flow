@@ -297,6 +297,7 @@
     const taskFlagsRow = document.getElementById('task-flags');
     const claudeSettingsSection = document.getElementById('claude-settings-section');
     const claudeNotificationsToggle = document.getElementById('claude-notifications-toggle');
+    const claudeChannelRow = document.getElementById('claude-channel-row');
     const toastEl = document.getElementById('toast');
     const tooltipEl = document.getElementById('tooltip');
     const modalOverlay = document.getElementById('modal-overlay');
@@ -921,39 +922,94 @@
 
     // ==================== Уведомления Claude Code (раздел «Claude» в настройках) ====================
 
+    /** Подписи каналов доставки для тостов (сами кнопки выбора — в разметке попапа) */
+    const CLAUDE_CHANNEL_LABELS = {
+        macos: 'системные уведомления macOS',
+        telegram: 'Telegram',
+    };
+
+    /** Выбранный канал доставки — приходит с бэка (читается из самого settings.json) */
+    let claudeChannel = '';
+
     /**
      * Читает состояние тумблера при инициализации (не только при открытии попапа — попап
      * может открыться раньше ответа, тогда секция появится с задержкой). Фича опциональна:
-     * секция [claude] не заполнена в config/params.ini — available=false, раздел остаётся
-     * скрытым (тот же приём, что у дашборда/Jira).
+     * конфиг не читается — available=false, раздел остаётся скрытым (тот же приём, что у
+     * дашборда/Jira).
      */
     async function loadClaudeSettings() {
         try {
             const data = await apiCall('../api/get_claude_settings.php', {});
             if (!data.available) return;
             claudeNotificationsToggle.checked = !!data.enabled;
+            renderClaudeChannels(data.channels || [], data.channel || '');
             claudeSettingsSection.classList.remove('hidden');
         } catch (e) {
             // Недоступно — раздел просто не показываем, это не ошибка пользователя
         }
     }
 
+    /**
+     * Ряд выбора канала: недоступные кнопки убираются совсем, а при единственном доступном
+     * канале прячется весь ряд — выбирать не из чего, и лишняя строка только шумит в попапе.
+     */
+    function renderClaudeChannels(channels, current) {
+        claudeChannel = current || channels[0] || '';
+
+        claudeChannelRow.querySelectorAll('.channel-option').forEach((btn) => {
+            btn.classList.toggle('hidden', !channels.includes(btn.dataset.channel));
+            btn.classList.toggle('channel-option--on', btn.dataset.channel === claudeChannel);
+        });
+
+        claudeChannelRow.classList.toggle('hidden', channels.length < 2);
+    }
+
     // Тумблер пишет только в локальный settings.json (без обращения к Telegram) — запрос
     // быстрый, отдельная индикация загрузки не нужна (см. правило в CLAUDE.md)
-    claudeNotificationsToggle.addEventListener('change', async () => {
-        const enabled = claudeNotificationsToggle.checked;
+    claudeNotificationsToggle.addEventListener('change', () => {
+        applyClaudeSettings(claudeNotificationsToggle.checked, claudeChannel);
+    });
+
+    // Переключение канала при выключенных уведомлениях в settings.json ничего не пишет —
+    // писать туда нечего, канал просто запомнится до включения тумблера
+    claudeChannelRow.addEventListener('click', (event) => {
+        const btn = event.target.closest('.channel-option');
+        if (!btn || btn.dataset.channel === claudeChannel) return;
+
+        const channel = btn.dataset.channel;
+        if (!claudeNotificationsToggle.checked) {
+            renderClaudeChannels(visibleClaudeChannels(), channel);
+            return;
+        }
+
+        applyClaudeSettings(true, channel);
+    });
+
+    /** @returns {string[]} каналы, оставшиеся видимыми после renderClaudeChannels() */
+    function visibleClaudeChannels() {
+        return Array.from(claudeChannelRow.querySelectorAll('.channel-option:not(.hidden)'))
+            .map((btn) => btn.dataset.channel);
+    }
+
+    async function applyClaudeSettings(enabled, channel) {
+        const previous = { enabled: claudeNotificationsToggle.checked, channel: claudeChannel };
         claudeNotificationsToggle.disabled = true;
         try {
-            const data = await apiCall('../api/toggle_claude_notifications.php', { enabled });
+            const data = await apiCall('../api/toggle_claude_notifications.php', { enabled, channel });
             claudeNotificationsToggle.checked = data.enabled;
-            showToast(data.enabled ? 'Уведомления Claude включены' : 'Уведомления Claude выключены');
+            renderClaudeChannels(visibleClaudeChannels(), data.channel);
+            showToast(data.enabled
+                ? 'Уведомления Claude включены — ' + (CLAUDE_CHANNEL_LABELS[data.channel] || data.channel)
+                : 'Уведомления Claude выключены');
         } catch (e) {
-            claudeNotificationsToggle.checked = !enabled; // откатываем визуально
+            // Откатываем визуально: в settings.json ничего не изменилось
+            claudeNotificationsToggle.checked = previous.enabled;
+            renderClaudeChannels(visibleClaudeChannels(), previous.channel);
             showToast(e.message || 'Не удалось изменить настройки Claude');
         } finally {
             claudeNotificationsToggle.disabled = false;
         }
-    });
+    }
 
     // ==================== Дропдаун git-команд у названия ветки ====================
 

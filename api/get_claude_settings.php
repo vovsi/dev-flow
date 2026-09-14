@@ -10,7 +10,7 @@ use App\ClaudeHooksService;
  * @OA\Post(
  *     path="/get_claude_settings",
  *     summary="Get Claude Code notifications state.",
- *     description="This method returns whether Claude Code Telegram notification hooks are currently enabled in the desktop app's settings.json.",
+ *     description="This method returns whether Claude Code notification hooks are currently enabled in the desktop app's settings.json, which delivery channel they use and which channels are available.",
  *     @OA\RequestBody(
  *         required=false,
  *         description="No parameters",
@@ -24,15 +24,17 @@ use App\ClaudeHooksService;
  *          description="Successful operation",
  *          @OA\JsonContent(
  *              @OA\Property(property="available", type="boolean", example=true),
- *              @OA\Property(property="enabled", type="boolean", example=false)
+ *              @OA\Property(property="enabled", type="boolean", example=false),
+ *              @OA\Property(property="channel", type="string", example="macos"),
+ *              @OA\Property(property="channels", type="array", @OA\Items(type="string"))
  *          )
  *      )
  * )
  */
 
-// Read-only: раздел «Claude» в настройках приложения читает текущее состояние тумблера при
-// открытии попапа настроек. available=false — секция [claude] не заполнена в
-// config/params.ini, раздел на фронте не показывается вовсе (тот же приём, что у Jira/LLM).
+// Read-only: раздел «Claude» в настройках приложения читает текущее состояние тумблера и
+// выбранный канал доставки. available=false — конфиг не читается вовсе, раздел на фронте не
+// показывается; сама секция [claude] необязательна, каналу macOS настраивать нечего.
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     respond(['error' => 'Метод не поддерживается'], 405);
@@ -40,13 +42,18 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $service = ClaudeHooksService::createFromConfig();
 if ($service === null) {
-    respond(['available' => false, 'enabled' => false]);
+    respond(['available' => false, 'enabled' => false, 'channel' => '', 'channels' => []]);
 }
 
 try {
-    $enabled = $service->isEnabled();
+    $state = $service->state();
 } catch (\Throwable $e) {
     respond(['error' => $e->getMessage()], 502);
 }
 
-respond(['available' => true, 'enabled' => $enabled]);
+respond([
+    'available' => true,
+    'enabled' => $state['enabled'],
+    'channel' => $state['channel'],
+    'channels' => $service->availableChannels(),
+]);

@@ -10,7 +10,7 @@ use App\ClaudeHooksService;
  * @OA\Post(
  *     path="/toggle_claude_notifications",
  *     summary="Toggle Claude Code notification hooks.",
- *     description="This method enables or disables the Telegram notification hooks (Notification and Stop events) in Claude Code desktop app's settings.json, based on the [claude] section in config/params.ini.",
+ *     description="This method enables or disables the notification hooks (Notification and Stop events) in Claude Code desktop app's settings.json and selects their delivery channel: telegram (bot from the [claude] section of config/params.ini) or macos (system notification via osascript).",
  *     @OA\RequestBody(
  *         required=true,
  *         description="Request data",
@@ -19,7 +19,8 @@ use App\ClaudeHooksService;
  *             @OA\Schema(
  *                 type="object",
  *                 example={
- *                     "enabled": true
+ *                     "enabled": true,
+ *                     "channel": "macos"
  *                 }
  *             )
  *         )
@@ -28,12 +29,13 @@ use App\ClaudeHooksService;
  *          response=200,
  *          description="Successfully toggled",
  *          @OA\JsonContent(
- *              @OA\Property(property="enabled", type="boolean", example=true)
+ *              @OA\Property(property="enabled", type="boolean", example=true),
+ *              @OA\Property(property="channel", type="string", example="macos")
  *          )
  *      ),
  *      @OA\Response(
  *          response=422,
- *          description="Claude notifications are not configured"
+ *          description="Claude notifications are not configured or the channel is unavailable"
  *      ),
  *      @OA\Response(
  *          response=502,
@@ -48,16 +50,26 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $input = readJsonInput();
 $enabled = (bool) ($input['enabled'] ?? false);
+$channel = trim((string) ($input['channel'] ?? ''));
 
 $service = ClaudeHooksService::createFromConfig();
 if ($service === null) {
-    respond(['error' => 'Уведомления Claude не настроены — заполните [claude] в config/params.ini'], 422);
+    respond(['error' => 'Не удалось прочитать config/params.ini'], 422);
+}
+
+// Канал не передан — берём первый доступный (тот же, что показывает get_claude_settings.php)
+if ($channel === '') {
+    $channel = $service->availableChannels()[0];
+}
+
+if (!in_array($channel, $service->availableChannels(), true)) {
+    respond(['error' => 'Канал уведомлений недоступен — заполните [claude] в config/params.ini'], 422);
 }
 
 try {
-    $result = $service->setEnabled($enabled);
+    $result = $service->setEnabled($enabled, $channel);
 } catch (\Throwable $e) {
     respond(['error' => $e->getMessage()], 502);
 }
 
-respond(['enabled' => $result]);
+respond($result);

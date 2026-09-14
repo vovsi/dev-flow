@@ -123,18 +123,25 @@ $assetVersion = static function (string $relativePath): string {
 <div id="theme-popover" class="popover popover--theme hidden">
     <button class="theme-option" data-theme="light">Светлая</button>
     <button class="theme-option" data-theme="dark">Тёмная</button>
-    <!-- Показывается только если в config/params.ini заполнена секция [claude]
-         (см. api/get_claude_settings.php) — без неё слать уведомления некуда -->
+    <!-- Показывается, когда api/get_claude_settings.php ответил available=true. Ряд выбора
+         канала появляется только если каналов больше одного (Telegram доступен лишь с
+         заполненными telegram_* в [claude]) -->
     <div id="claude-settings-section" class="popover-section hidden">
         <div class="popover-divider"></div>
         <div class="popover-label">Claude</div>
-        <label class="popover-toggle-row" data-tooltip="Хуки Notification/Stop в Telegram у Claude Code (десктопное приложение)">
+        <label class="popover-toggle-row" data-tooltip="Хуки Notification/Stop у Claude Code (десктопное приложение)">
             <span>Уведомления</span>
             <span class="toggle-switch">
                 <input type="checkbox" id="claude-notifications-toggle">
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
             </span>
         </label>
+        <div id="claude-channel-row" class="channel-row hidden" role="group" aria-label="Канал уведомлений">
+            <button type="button" class="channel-option" data-channel="macos"
+                    data-tooltip="Системное уведомление macOS — хук исполняется на хосте через osascript, настраивать нечего">macOS</button>
+            <button type="button" class="channel-option" data-channel="telegram"
+                    data-tooltip="Сообщение в Telegram-бота из секции [claude] в config/params.ini">Telegram</button>
+        </div>
     </div>
 </div>
 

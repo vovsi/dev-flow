@@ -153,6 +153,8 @@ quotes_url = "https://zenquotes.io/api/random"
 ; notification_text/stop_text — необязательно, тексты сообщений; дефолты — как были раньше
 ; в settings.json этого пользователя.
 [claude]
+; Notification channel is picked in the app (Settings → Claude): "macOS" needs nothing at all,
+; "Telegram" appears in the picker only when both telegram_* keys below are filled in.
 telegram_bot_token = "123456:AA...your-bot-token"
 telegram_chat_id = "000000000"
 notification_text = "🔔 Claude Code просит внимания!"

@@ -154,9 +154,10 @@ Per-task flags live in a row of chips right under the task key, not in the setti
 right away.
 
 The gear icon in the top right opens the settings popover, which holds only app-wide settings —
-the theme switch (Светлая/Тёмная) and, if `[claude]` is configured, a "Claude" section with a
-single "Уведомления" toggle that turns Claude Code desktop's Telegram notification hooks on and
-off (see [9. Claude Code notifications](#9-claude-code-notifications--claude)).
+the theme switch (Светлая/Тёмная) and a "Claude" section with a "Уведомления" *(notifications)*
+toggle that turns Claude Code desktop's notification hooks on and off, plus a macOS/Telegram
+picker for how those notifications are delivered
+(see [10. Claude Code notifications](#10-claude-code-notifications--claude)).
 
 The link screen also shows a small dashboard above the input field: two tiles side by side, both
 counting Jira tasks **assigned to you** that have been sitting in one status for longer than its
@@ -596,10 +597,21 @@ keys**. If the rate can't be fetched, the earnings line is simply omitted from t
 
 ### 10. Claude Code notifications — `[claude]`
 
-The gear icon → "Claude" section has a single "Уведомления" toggle. Turning it on writes a
-`hooks` block into Claude Code desktop's own `settings.json` (`Notification` and `Stop` events,
-each a `curl` call to the Telegram Bot API); turning it off removes the `hooks` key entirely,
-whatever it held before.
+The gear icon → "Claude" section has a "Уведомления" *(notifications)* toggle and, right under
+it, a picker for the delivery channel. Turning the toggle on writes a `hooks` block into Claude
+Code desktop's own `settings.json` (`Notification` and `Stop` events, one command each); turning
+it off removes the `hooks` key entirely, whatever it held before.
+
+| Channel | What the hook runs | What it needs |
+|---|---|---|
+| **macOS** | `osascript` → a system notification titled "Claude Code", with the `Glass` sound | Nothing — it works out of the box |
+| **Telegram** | `curl` to the Telegram Bot API | `telegram_bot_token` + `telegram_chat_id` below |
+
+The channel isn't stored anywhere on its own — it is read back from the hook command already in
+`settings.json`, so editing that file by hand stays safe. Switching the channel while the toggle
+is on rewrites the hooks immediately; while it is off, the choice is just remembered until you
+switch the toggle on. The picker row is hidden altogether when only one channel is available,
+i.e. when Telegram isn't configured.
 
 ```ini
 [claude]
@@ -609,13 +621,13 @@ notification_text = "🔔 Claude Code просит внимания!"
 stop_text = "✅ Claude Code завершил задачу!"
 ```
 
+The whole section is optional — leave it out and you still get macOS notifications. To add
+Telegram as a second option:
+
 1. Create a bot with [@BotFather](https://t.me/BotFather) and copy its token.
 2. Get your numeric chat id, e.g. from [@userinfobot](https://t.me/userinfobot).
-3. Put both into `[claude]`. `notification_text`/`stop_text` are optional — the messages shown
-   above are the defaults.
-
-Not configured (`telegram_bot_token` or `telegram_chat_id` missing) — the "Claude" section simply
-doesn't show up in the settings popover.
+3. Put both into `[claude]`. `notification_text`/`stop_text` are optional (they apply to both
+   channels) — the messages shown above are the defaults.
 
 **This is the one feature that reaches outside the container onto your machine.** The toggle
 edits `~/.claude/settings.json` — the real settings file of the Claude Code desktop app running
@@ -629,8 +641,8 @@ volumes:
 
 Only that one file is mounted, not the whole `~/.claude` directory (which also holds MCP tokens
 and session history the app has no business touching). If you don't want DevFlow to have write
-access to it at all, just leave `[claude]` unset and remove that line from `docker-compose.yml` —
-everything else keeps working.
+access to it at all, remove that line from `docker-compose.yml` — the "Claude" section then just
+fails to write, and everything else keeps working.
 
 ---
 
@@ -647,7 +659,7 @@ everything else keeps working.
 | The dashboard alert dot | Open a task while a metric is above zero | A small red dot on the back arrow in the top-left corner |
 | The LLM | Reach "Создать ветку в Git" → "Сгенерировать" | A branch name lands in the field |
 | GitHub CLI | `gh auth status` | `Logged in to github.com` |
-| Claude notifications | Gear icon → flip "Уведомления" on | `~/.claude/settings.json` on your host gets a `hooks` key with `Notification`/`Stop` curl commands |
+| Claude notifications | Gear icon → flip "Уведомления" on | `~/.claude/settings.json` on your host gets a `hooks` key with `Notification`/`Stop` commands — `osascript` for the macOS channel, `curl` for Telegram |
 
 PHP logs when running under Docker: `docker compose logs -f app`.
 
@@ -660,7 +672,7 @@ PHP logs when running under Docker: `docker compose logs -f app`.
 | `[github]` | Reviewers in the `gh pr create` command | The command itself is still copied |
 | `[git]`, `[templates]`, `[docs]` | The `Rebase …` entries, project names and documentation links inside the copied texts | The texts are copied without those pieces |
 | `[checklist]`, `[worktime]`, `[dashboard]`, `[salary]`, `[currency]`, `[services]` | Nothing — the defaults kick in (the checklist stays strictly ordered) | Everything |
-| `[claude]` | The "Claude" section in the settings popover doesn't appear | Everything else |
+| `[claude]` | Telegram disappears from the notification channel picker | The "Claude" section itself, with macOS system notifications |
 | No `params.ini` at all | Every integration | The checklist, the branch, copying texts, the progress bar |
 
 ## Troubleshooting
@@ -686,7 +698,8 @@ PHP logs when running under Docker: `docker compose logs -f app`.
 | The dashboard above the input field is missing | `[atlassian]` isn't configured or Jira is unreachable — there is nothing to count, so the block hides itself. Check the `myself` call above |
 | A dashboard counter stays at `0` with an old task in that status | Days off are skipped, so the age is measured in working hours only: check `[worktime].non_working_days` and `[dashboard].stale_pull_request_hours` / `stale_blocked_hours`. Also make sure `pull_request_status` / `blocked_status` match the status names in Jira exactly |
 | Time you just logged isn't in the list | The Jira Cloud search index updates with a delay — the app re-fetches the open task directly, the rest show up within a few seconds |
-| The "Claude" section is missing from settings | `[claude]` isn't configured (`telegram_bot_token`/`telegram_chat_id`) |
+| The channel picker under "Уведомления" is missing | Only one channel is available — fill in `telegram_bot_token`/`telegram_chat_id` in `[claude]` to get Telegram as well |
+| A macOS notification doesn't pop up | macOS has notifications muted or turned off for the app running the hook (System Settings → Notifications, and check Do Not Disturb) |
 | Toggling "Уведомления" fails with a write error | `${HOME}/.claude/settings.json` isn't mounted (check `docker-compose.yml`), the file doesn't exist yet on the host, or it isn't valid JSON |
 
 ## Project structure

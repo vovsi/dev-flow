@@ -452,9 +452,9 @@ final class Config
     /**
      * Настройки уведомлений Claude Code (раздел «Claude» в настройках приложения) —
      * тумблер собирает из них блок hooks в settings.json (см. ClaudeHooksService).
-     * Токен и chat_id обязательны: без них слать уведомления некуда, поэтому фича молча
-     * отключается целиком (тот же приём, что у [atlassian] и [llm] — исключение здесь ловит
-     * ClaudeHooksService::createFromConfig()).
+     * Секция целиком необязательна: канал «системное уведомление macOS» ничего не требует,
+     * а токен и chat_id нужны только каналу Telegram — без них он просто недоступен в выборе
+     * (проверка — ClaudeHooksService::availableChannels(), а не исключение отсюда).
      *
      * @return array{settings_path: string, bot_token: string, chat_id: string, notification_text: string, stop_text: string}
      */
@@ -464,12 +464,6 @@ final class Config
 
         $botToken = trim((string) ($section['telegram_bot_token'] ?? ''));
         $chatId = trim((string) ($section['telegram_chat_id'] ?? ''));
-
-        if ($botToken === '' || $chatId === '') {
-            throw new RuntimeException(
-                'Уведомления Claude не настроены — заполните [claude] в config/params.ini'
-            );
-        }
 
         return [
             'settings_path' => self::stringOrDefault($section, 'settings_path', self::CLAUDE_DEFAULTS['settings_path']),
