@@ -1410,13 +1410,17 @@
     }
 
     /** Варианты Story Points для модалки пункта «Указать Story Points» */
+    // Карты покерной колоды команды (см. Confluence «Story Points»): ?, 1, 2, 3, 5, 8, 13, 21, ∞.
+    // «?» и «∞» сюда не входят — поле Story Points в Jira числовое, записать их туда нельзя.
+    // Оценка — про объём и неизвестные относительно других задач, а не про часы.
     const STORY_POINTS_OPTIONS = [
         { value: 1, description: 'Тривиально, хорошо понятно, никаких неизвестных' },
         { value: 2, description: 'Просто, всё ясно, есть понятный путь выполнения' },
         { value: 3, description: 'Средняя сложность, возможно одна неизвестная' },
         { value: 5, description: 'Сложно, несколько неизвестных или технические сложности' },
         { value: 8, description: 'Очень сложно, много неизвестных, стоит рассмотреть разбиение на части' },
-        { value: 13, description: 'Слишком большая задача, обязательно нужно разбить на подзадачи' },
+        { value: 13, description: 'Слишком большая задача, разбить до попадания в спринт' },
+        { value: 21, description: 'Задача заведомо не влезает в спринт, разбивать обязательно' },
     ];
 
     // ==================== Поведение пунктов чек-листа ====================
@@ -2061,8 +2065,13 @@
             });
         },
 
-        // PR отправлен ревьюверу — отмечается сразу по клику, без модалки и запросов
-        send_pr: (item) => markDone(item.id),
+        // PR отправлен ревьюверу — отмечается сразу по клику, без модалки и запросов;
+        // ссылку на PR кладём в буфер, чтобы сразу отправить её ревьюверу в мессенджер
+        send_pr: async (item) => {
+            const prLink = sessionStorage.getItem(prLinkStorageKey()) || '';
+            if (prLink && await copyText(prLink)) notifyCopied('ссылка на PR');
+            await markDone(item.id);
+        },
     };
 
     function handleItemClick(item) {
@@ -2593,10 +2602,14 @@
      */
     async function showCongratsModal(totalSecondsToday) {
         showGlobalLoader();
+        // Заработок показываем как за полноценный рабочий день: день закрыт (в том числе
+        // «бессрочно», с недобором часов) — оплата всё равно дневная, а не пропорционально
+        // затреканному. Сверхурочные сверх нормы при этом считаются по факту.
+        const earningsSeconds = Math.max(totalSecondsToday, DAILY_NORM_SECONDS);
         let earnings, quote, breakdown;
         try {
             [earnings, quote, breakdown] = await Promise.all([
-                apiCall('../api/calc_earnings.php', { seconds: totalSecondsToday }).catch(() => null),
+                apiCall('../api/calc_earnings.php', { seconds: earningsSeconds }).catch(() => null),
                 apiCall('../api/generate_motivation_quote.php', {}).catch(() => null),
                 apiCall('../api/today_time_spent_breakdown.php', ensureTaskPayload()).catch(() => null),
             ]);

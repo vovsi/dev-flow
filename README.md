@@ -78,7 +78,7 @@ database is just a file next to the code.
 
 | Step | What the app does | Integration needed |
 |---|---|---|
-| Указать Story Points *(set Story Points)* | A modal with 1/2/3/5/8/13 → writes the field in Jira. The item is hidden if Story Points are already set on the task | Jira |
+| Указать Story Points *(set Story Points)* | A modal with 1/2/3/5/8/13/21 (the team poker deck without the non-numeric `?` and `∞` cards) → writes the field in Jira. The item is hidden if Story Points are already set on the task | Jira |
 | Перевести в статус Doing *(transition to Doing)* | Transitions the Jira task to the status from your config. The item is hidden if the task is already in that status in Jira (for example, you moved it there by hand) | Jira |
 | Создать ветку в Git *(create a git branch)* | Generates a branch name with the LLM from the task title, copies it to the clipboard, stores it in the DB. The item is hidden once the task already has a branch name saved — the name itself stays at the bottom of the screen with its git commands dropdown | LLM (optional) |
 | Закоммитить код *(commit the code)* | A "what did you do" field → the LLM builds the commit message subject line in Conventional Commits form with the Jira key | LLM |
@@ -89,7 +89,7 @@ database is just a file next to the code.
 | Оставить описание в Jira *(leave a description in Jira)* | An editable field with the `Results` / `Testing` / `Database` / `Config` / `Pull Requests` sections. If those sections are already in the task description in Jira, their current text is pulled into the field when the modal opens, so you can edit the description right here; if they aren't, the field starts from the empty template. The link to the PR (from `Создать PR`, or from `Закоммитить изменения` in Claude Code skill mode) is put into the `Pull Requests` section for you — filling in the first empty item (an empty line or a dash), or as the next item down if another PR is already listed, so a multi-repo task keeps them all. Both list styles are understood, the `#` wiki list the template (and Jira itself) uses and the `1.` numbering left in older descriptions, and a new item reuses whichever the section already has; a link is written as a Jira smart link, the way Jira itself formats one, so it looks and expands like the PR links already in the list. The `Database` and `Config` notes you typed in `Закоммитить изменения` land in the sections of the same name the same way, and the `Другое` note is appended in brackets to the last `Pull Requests` item. Nothing is written to Jira until you press the save button. `Скопировать` *(copy)* copies whatever is in the field, keeping the section headers bold. The button next to it writes the field into the task description in Jira — `Добавить в описание задачи` *(add to the task description)* when the sections aren't there yet, and `Пункты уже в описании` *(the sections are already in the description)*, disabled, until you edit the text: as soon as you do, it turns into `Сохранить в описании` *(save into the description)* and replaces the sections in Jira with what you typed (the text above them is kept). If Jira can't be read at all (not configured, or down), the field still opens on the template with your PR link and notes filled in, so you can copy the block by hand — only the save button is disabled, reading `Описание Jira недоступно` *(the Jira description is unavailable)*, because it is unknown whether the sections have to be replaced or appended. With the "Claude Skill" chip on, there's also a `[Claude] Results` button that copies the `/commit-results` command — a Claude Code skill fills in the `Results` section for you | Jira |
 | Перевести задачу в Pull Request | Transitions the Jira task to the status from your config. The item is hidden when the task's workflow has no transition into that status at all (nothing to transition with — the click could only fail), and also once the task is already in it | Jira |
 | Затрекать время *(log time)* | A slider spanning your whole work day (lunch excluded) → adds a worklog to Jira. When you hit your daily norm, a congrats modal shows today's earnings and a motivational quote. `Закончить бессрочно` *(call it a day)* logs the same time and closes the day even if you're short of the norm — see the [time logging](#time-logging) section | Jira |
-| PR отправлен ревьюверу *(the PR was sent to a reviewer)* | Just a tick | — |
+| PR отправлен ревьюверу *(the PR was sent to a reviewer)* | A tick, and the PR link you entered earlier is copied to the clipboard so you can paste it straight into your messenger | — |
 
 ## Claude Code skill mode (per task)
 
@@ -587,7 +587,9 @@ quotes_url = "https://zenquotes.io/api/random"
 All optional — the defaults are shown above. The hourly rate is
 `monthly_usd / (working_days_per_month × daily_hours)`, and the amount is then converted into
 `[currency].code` at the rate from `exchange_rate_url` (cached for 6 hours in
-`storage/exchange_rate_cache.json`). The rate and quote services are public and **need no
+`storage/exchange_rate_cache.json`). A day always pays as a **full** day: even if you close it
+with `Закончить бессрочно` below the norm, the modal shows the earnings for `daily_hours`
+(anything logged above the norm is counted as it is). The rate and quote services are public and **need no
 keys**. If the rate can't be fetched, the earnings line is simply omitted from the modal.
 
 ---
