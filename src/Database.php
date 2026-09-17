@@ -25,6 +25,7 @@ final class Database
         ['code' => 'story_points', 'title' => 'Указать Story Points'],
         ['code' => 'status_doing', 'title' => 'Перевести в статус Doing'],
         ['code' => 'git_branch', 'title' => 'Создать ветку в Git'],
+        ['code' => 'skill_code', 'title' => 'Написать код'],
         ['code' => 'skill_commit', 'title' => 'Закоммитить изменения'],
         ['code' => 'code_written', 'title' => 'Закоммитить код'],
         ['code' => 'pull_request', 'title' => 'Создать PR'],

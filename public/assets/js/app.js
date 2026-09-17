@@ -26,6 +26,10 @@
         return url ? ` См.: ${url}` : '';
     }
 
+    /** Команда скилла Claude Code, который пишет код задачи (пункт `skill_code`,
+     * виден только при включённом у задачи флаге claude_code_skill_mode — чип «Claude Skill») */
+    const SKILL_IMPLEMENT_COMMAND = '/implement-task';
+
     /** Команда скилла Claude Code, который делает коммит за разработчика (пункт `skill_commit`,
      * виден только при включённом у задачи флаге claude_code_skill_mode — чип «Claude Skill») */
     const SKILL_COMMIT_COMMAND = '/commit';
@@ -343,6 +347,7 @@
     const ITEM_OPENS_MODAL = new Set([
         'story_points',
         'git_branch',
+        'skill_code',
         'skill_commit',
         'code_written',
         'pull_request',
@@ -417,6 +422,7 @@
         story_points: 'jira',
         status_doing: 'jira',
         git_branch: 'git',
+        skill_code: 'php',
         skill_commit: 'claude',
         code_written: 'php',
         pull_request: 'github',
@@ -1704,6 +1710,33 @@
             );
             if (!link) return;
             sessionStorage.setItem(prLinkStorageKey(), link);
+            await markDone(item.id);
+        },
+
+        // Написать код — шаг режима Claude Code Skill: сам код пишет скилл Claude Code, от
+        // приложения нужна только его команда в буфере (копирование можно повторять), отметка
+        // пункта — «Готово»
+        skill_code: async (item) => {
+            const confirmed = await showModal(
+                'Написать код',
+                '<div class="modal-copy-actions">' +
+                    `<button type="button" class="btn btn-secondary" data-copy-btn>${escapeHtml(SKILL_IMPLEMENT_COMMAND)}</button>` +
+                    '</div>',
+                [
+                    { label: 'Отмена', value: false },
+                    { label: 'Готово', primary: true, value: true },
+                ],
+                (bodyEl) => {
+                    bodyEl.querySelector('[data-copy-btn]').addEventListener('click', async () => {
+                        await copyText(SKILL_IMPLEMENT_COMMAND);
+                        notifyCopied(`команда «${SKILL_IMPLEMENT_COMMAND}»`);
+                    });
+                }
+            );
+            if (!confirmed) {
+                return;
+            }
+
             await markDone(item.id);
         },
 

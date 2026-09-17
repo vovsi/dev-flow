@@ -82,6 +82,7 @@ final class ChecklistRepository
      * скилла, в обычном процессе их делать нечем.
      */
     private const CLAUDE_CODE_SKILL_MODE_ONLY_CODES = [
+        'skill_code',
         'skill_commit',
     ];
 

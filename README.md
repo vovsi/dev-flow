@@ -95,10 +95,12 @@ database is just a file next to the code.
 
 Every task carries its own `claude_code_skill_mode` flag (`tasks.claude_code_skill_mode` in the
 database) — **on by default**. While it's on, `Закоммитить код`, `Создать PR`, `Проверить PR
-Claude Code` and `Указать описание PR` are hidden from the table above, and a single
-`Закоммитить изменения` *(commit the changes)* item appears instead right after `Создать ветку
-в Git`, with a `/commit` command for a Claude Code skill that's assumed to handle the commit,
-the PR, its description and the review for you. Two things the skill can't know go into that
+Claude Code` and `Указать описание PR` are hidden from the table above, and two items appear
+instead right after `Создать ветку в Git`. The first, `Написать код` *(write the code)*, just
+copies the `/implement-task` command for the Claude Code skill that implements the task, and is
+ticked with `Готово` *(done)* when the skill is finished. The second, `Закоммитить изменения`
+*(commit the changes)*, carries a `/commit` command for the skill that's assumed to handle the
+commit, the PR, its description and the review for you. Two things the skill can't know go into that
 item's modal, which is laid out as three numbered stages in the order you work through them:
 **1** the `/commit` command for the skill, **2** the link to the PR it created (an optional
 `Ссылка на PR` *(link to the PR)* field — the same link `Создать PR` would have stored, so the
