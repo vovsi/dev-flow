@@ -1497,16 +1497,29 @@ html[data-theme="dark"] .modal:has(.congrats-modal) {
     width: 100%;
 }
 
+/* Код задачи, её заголовок и ряд флагов — одна карточка в том же стекле, что и список пунктов:
+   так видно, что это данные задачи, а не три отдельные строки экрана. Прогресс-бар в карточку
+   намеренно не входит — он про состояние чек-листа, а не про саму задачу */
 .task-header {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 0;
+    width: 100%;
+    max-width: 420px;
+    padding: 12px 16px;
+    background: var(--surface);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    border: 1px solid var(--surface-border);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
 }
 
 .task-id {
     font-size: 22px;
     font-weight: 650;
+    line-height: 1.15;
     letter-spacing: -0.3px;
     color: inherit;
     text-decoration: none;
@@ -1522,6 +1535,22 @@ html[data-theme="dark"] .modal:has(.congrats-modal) {
     text-decoration: underline;
 }
 
+/* Заголовок задачи под её кодом: вспомогательная подпись, а не второй заголовок — мелкий,
+   приглушённый и не длиннее двух строк (в окне 500×500 длинный тайтл иначе отжимает чек-лист) */
+.task-title {
+    max-width: 100%;
+    margin-top: 2px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+    text-align: center;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+}
+
 /* Флаги текущей задачи (#task-flags) — ряд компактных переключателей-«чипов» прямо под кодом
    задачи. Раньше это были тумблеры в попапе настроек (раздел «Эта задача»): попап приходилось
    открывать ради двух галочек, а флаги меняют состав чек-листа, то есть относятся к экрану
@@ -1532,7 +1561,7 @@ html[data-theme="dark"] .modal:has(.congrats-modal) {
     flex-wrap: wrap;
     justify-content: center;
     gap: 6px;
-    margin-top: 2px;
+    margin-top: 6px;
 }
 
 .task-flag {

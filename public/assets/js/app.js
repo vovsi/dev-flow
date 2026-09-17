@@ -284,6 +284,7 @@
     const dashboardEl = document.getElementById('dashboard');
     const dashboardRefreshBtn = document.getElementById('dashboard-refresh');
     const taskIdLabel = document.getElementById('task-id-label');
+    const taskTitleLabel = document.getElementById('task-title');
     const changeTaskBtn = document.getElementById('change-task-btn');
     const checklistEl = document.getElementById('checklist');
     const progressFill = document.getElementById('progress-fill');
@@ -1193,11 +1194,20 @@
         taskScreen.classList.remove('hidden');
         taskIdLabel.textContent = state.task.task_id;
         taskIdLabel.href = safeHttpUrl(state.task.task_link);
+        renderTaskTitle();
         renderGitBranch();
         renderChecklist();
         changeTaskBtn.classList.remove('hidden'); // возврат к вводу ссылки есть только внутри задачи
         updateTrackTimeAvailability(); // быстрый трек времени доступен только внутри задачи
         renderTaskFlags(); // ряд флагов живёт на экране задачи, значит рисуется вместе с ним
+    }
+
+    // Тайтл приходит из Jira и может быть пустым (Jira не настроена/недоступна) — тогда
+    // подпись не показываем вовсе, пустая строка только съедала бы место под кодом задачи
+    function renderTaskTitle() {
+        const title = state.task && state.task.title ? String(state.task.title).trim() : '';
+        taskTitleLabel.textContent = title;
+        taskTitleLabel.classList.toggle('hidden', title === '');
     }
 
     function showLinkScreen() {

@@ -197,6 +197,9 @@ $assetVersion = static function (string $relativePath): string {
     <section id="task-screen" class="screen task-screen hidden">
         <div class="task-header">
             <a class="task-id" id="task-id-label" target="_blank" rel="noopener"></a>
+            <!-- Заголовок задачи из Jira: подсказка «что это за задача», поэтому приглушён
+                 и обрезан двумя строками — он не должен спорить с кодом задачи -->
+            <div class="task-title hidden" id="task-title"></div>
             <!-- Переключатели флагов этой задачи (tasks.claude_code_skill_mode,
                  tasks.waiting_for_deploy) — рисуются из карты TASK_FLAG_TOGGLES в app.js,
                  см. renderTaskFlags(); новый флаг = запись в карте, разметку править не нужно -->
