@@ -1727,6 +1727,11 @@
         // приложения нужна только его команда в буфере (копирование можно повторять), отметка
         // пункта — «Готово»
         skill_code: async (item) => {
+            // Скиллу нужна сама задача, а не только команда — ссылку он ниоткуда больше не
+            // возьмёт, поэтому она уходит в буфер вместе с командой
+            const command = state.task && state.task.task_link
+                ? `${SKILL_IMPLEMENT_COMMAND} ${state.task.task_link}`
+                : SKILL_IMPLEMENT_COMMAND;
             const confirmed = await showModal(
                 'Написать код',
                 '<div class="modal-copy-actions">' +
@@ -1738,8 +1743,8 @@
                 ],
                 (bodyEl) => {
                     bodyEl.querySelector('[data-copy-btn]').addEventListener('click', async () => {
-                        await copyText(SKILL_IMPLEMENT_COMMAND);
-                        notifyCopied(`команда «${SKILL_IMPLEMENT_COMMAND}»`);
+                        await copyText(command);
+                        notifyCopied(`команда «${command}»`);
                     });
                 }
             );

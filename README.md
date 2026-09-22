@@ -97,7 +97,8 @@ Every task carries its own `claude_code_skill_mode` flag (`tasks.claude_code_ski
 database) — **on by default**. While it's on, `Закоммитить код`, `Создать PR`, `Проверить PR
 Claude Code` and `Указать описание PR` are hidden from the table above, and two items appear
 instead right after `Создать ветку в Git`. The first, `Написать код` *(write the code)*, just
-copies the `/implement-task` command for the Claude Code skill that implements the task, and is
+copies the `/implement-task` command for the Claude Code skill that implements the task, with the
+Jira task link appended after a space so the skill knows which task to work on, and is
 ticked with `Готово` *(done)* when the skill is finished. The second, `Закоммитить изменения`
 *(commit the changes)*, carries a `/commit` command for the skill that's assumed to handle the
 commit, the PR, its description and the review for you. Two things the skill can't know go into that
