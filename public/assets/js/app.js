@@ -30,6 +30,10 @@
      * виден только при включённом у задачи флаге claude_code_skill_mode — чип «Claude Skill») */
     const SKILL_IMPLEMENT_COMMAND = '/implement-task';
 
+    /** Команда скилла Claude Code, который пишет документацию API (пункт `skill_code`,
+     * виден только при включённом у задачи флаге claude_code_skill_mode — чип «Claude Skill») */
+    const SKILL_DOCUMENT_API_COMMAND = '/document-api';
+
     /** Команда скилла Claude Code, который делает коммит за разработчика (пункт `skill_commit`,
      * виден только при включённом у задачи флаге claude_code_skill_mode — чип «Claude Skill») */
     const SKILL_COMMIT_COMMAND = '/commit';
@@ -1730,8 +1734,9 @@
         },
 
         // Написать код — шаг режима Claude Code Skill: сам код пишет скилл Claude Code, от
-        // приложения нужна только его команда в буфере (копирование можно повторять), отметка
-        // пункта — «Готово»
+        // приложения нужны только его команды в буфере (копирование можно повторять), отметка
+        // пункта — «Готово». Команд две: реализация задачи и документирование API — обе делает
+        // скилл, и на этом же шаге, поэтому заводить ради второй отдельный пункт незачем
         skill_code: async (item) => {
             // Скиллу нужна сама задача, а не только команда — ссылку он ниоткуда больше не
             // возьмёт, поэтому она уходит в буфер вместе с командой
@@ -1741,16 +1746,20 @@
             const confirmed = await showModal(
                 'Написать код',
                 '<div class="modal-copy-actions">' +
-                    `<button type="button" class="btn btn-secondary" data-copy-btn>${escapeHtml(SKILL_IMPLEMENT_COMMAND)}</button>` +
+                    `<button type="button" class="btn btn-secondary" data-copy-btn data-command="${escapeHtml(command)}">${escapeHtml(SKILL_IMPLEMENT_COMMAND)}</button>` +
+                    `<button type="button" class="btn btn-secondary" data-copy-btn data-command="${escapeHtml(SKILL_DOCUMENT_API_COMMAND)}">${escapeHtml(SKILL_DOCUMENT_API_COMMAND)}</button>` +
                     '</div>',
                 [
                     { label: 'Отмена', value: false },
                     { label: 'Готово', primary: true, value: true },
                 ],
                 (bodyEl) => {
-                    bodyEl.querySelector('[data-copy-btn]').addEventListener('click', async () => {
-                        await copyText(command);
-                        notifyCopied(`команда «${command}»`);
+                    bodyEl.querySelectorAll('[data-copy-btn]').forEach((btn) => {
+                        btn.addEventListener('click', async () => {
+                            const text = btn.dataset.command;
+                            await copyText(text);
+                            notifyCopied(`команда «${text}»`);
+                        });
                     });
                 }
             );
