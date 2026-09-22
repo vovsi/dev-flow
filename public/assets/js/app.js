@@ -38,6 +38,10 @@
      * (пункт `jira_description`, показывается только при включённом флаге claude_code_skill_mode) */
     const SKILL_COMMIT_RESULTS_COMMAND = '/commit-results';
 
+    /** Команда скилла Claude Code, который проверяет оформление задачи в Jira
+     * (пункт `review_jira_task`) */
+    const SKILL_REVIEW_JIRA_COMMAND = '/review-jira-task';
+
     /** Шаблон блока секций описания задачи (пункт `jira_description`) — приходит из того же
      * PHP-кода, который пишет блок в Jira (JiraDescriptionService::template()), чтобы список
      * секций не завёлся на фронте вторым, разъезжающимся с ним, экземпляром */
@@ -355,6 +359,7 @@
         'claude_review',
         'pr_description',
         'jira_description',
+        'review_jira_task',
     ]);
 
     // ==================== Иконки сервисов (справа у каждого пункта чек-листа) ====================
@@ -431,6 +436,7 @@
         pr_description: 'github',
         status_ready_for_review: 'github',
         jira_description: 'jira',
+        review_jira_task: 'claude',
         status_pull_request: 'jira',
         time_tracking: 'jira',
         send_pr: 'telegram',
@@ -2109,6 +2115,36 @@
             if (confirmed) {
                 await markDone(item.id);
             }
+        },
+
+        // Проверить Jira задачу — проверку делает скилл Claude Code, приложение только отдаёт
+        // его команду в буфер. Ссылку на задачу скилл ниоткуда не возьмёт, поэтому она уходит
+        // вместе с командой (тот же приём, что у `skill_code`)
+        review_jira_task: async (item) => {
+            const command = state.task && state.task.task_link
+                ? `${SKILL_REVIEW_JIRA_COMMAND} ${state.task.task_link}`
+                : SKILL_REVIEW_JIRA_COMMAND;
+            const confirmed = await showModal(
+                'Проверить Jira задачу',
+                '<div class="modal-copy-actions">' +
+                    `<button type="button" class="btn btn-secondary" data-copy-btn>${escapeHtml(SKILL_REVIEW_JIRA_COMMAND)}</button>` +
+                    '</div>',
+                [
+                    { label: 'Отмена', value: false },
+                    { label: 'Готово', primary: true, value: true },
+                ],
+                (bodyEl) => {
+                    bodyEl.querySelector('[data-copy-btn]').addEventListener('click', async () => {
+                        await copyText(command);
+                        notifyCopied(`команда «${command}»`);
+                    });
+                }
+            );
+            if (!confirmed) {
+                return;
+            }
+
+            await markDone(item.id);
         },
 
         // Перевести задачу в Pull Request — переводит статус задачи в Jira,

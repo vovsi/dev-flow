@@ -33,6 +33,7 @@ final class Database
         ['code' => 'pr_description', 'title' => 'Указать описание PR'],
         ['code' => 'status_ready_for_review', 'title' => 'PR`s переведены в Ready for review'],
         ['code' => 'jira_description', 'title' => 'Оставить описание в Jira'],
+        ['code' => 'review_jira_task', 'title' => 'Проверить Jira задачу'],
         ['code' => 'status_pull_request', 'title' => 'Перевести задачу в Pull Request'],
         ['code' => 'time_tracking', 'title' => 'Затрекать время'],
         ['code' => 'send_pr', 'title' => 'PR отправлен ревьюверу'],
