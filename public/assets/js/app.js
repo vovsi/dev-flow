@@ -38,10 +38,6 @@
      * виден только при включённом у задачи флаге claude_code_skill_mode — чип «Claude Skill») */
     const SKILL_COMMIT_COMMAND = '/commit';
 
-    /** Команда скилла Claude Code, который заполняет секцию Results в описании для Jira
-     * (пункт `jira_description`, показывается только при включённом флаге claude_code_skill_mode) */
-    const SKILL_COMMIT_RESULTS_COMMAND = '/commit-results';
-
     /** Команда скилла Claude Code, который проверяет оформление задачи в Jira
      * (пункт `review_jira_task`) */
     const SKILL_REVIEW_JIRA_COMMAND = '/review-jira-task';
@@ -366,6 +362,20 @@
         'review_jira_task',
     ]);
 
+    /** Пункты, которые при включённом у задачи флаге claude_code_skill_mode отмечаются сразу по
+     * клику, без модалки и своего обработчика, — и под другим заголовком: шаг за разработчика уже
+     * сделал скилл, подтверждать остаётся только факт. `code` → заголовок в этом режиме */
+    const SKILL_MODE_INSTANT_TITLES = {
+        jira_description: 'Оставлено описание в Jira',
+    };
+
+    /** Пункт отмечается сразу, потому что его шаг выполняет скилл Claude Code (см. SKILL_MODE_INSTANT_TITLES) */
+    function isSkillModeInstant(item) {
+        return Boolean(state.task)
+            && isTaskFlagEnabled(state.task, 'claude_code_skill_mode')
+            && Object.prototype.hasOwnProperty.call(SKILL_MODE_INSTANT_TITLES, item.code);
+    }
+
     // ==================== Иконки сервисов (справа у каждого пункта чек-листа) ====================
 
     /** Разметка и брендовый цвет иконки по сервису. Цвет одновременно — источник лёгкой подсветки строки */
@@ -520,24 +530,6 @@
      * описание PR», чтобы не набирать один и тот же текст дважды */
     function commitDescriptionStorageKey() {
         return `devflow_commit_description_${state.task.id}`;
-    }
-
-    /** Заметки о выливке из пункта «Закоммитить изменения» (`database`/`config`/`other`) —
-     * уходят нейронке за оформленной инструкцией и попадают в описание задачи в пункте
-     * «Оставить описание в Jira»: первые две — пунктами одноимённых секций (как ссылка на PR),
-     * `other` — уточнением в скобках к последнему PR */
-    function deployNoteStorageKey(kind) {
-        return `devflow_deploy_${kind}_${state.task.id}`;
-    }
-
-    /** Запомнить (или забыть, если поле опустело) заметку о выливке из поля модалки */
-    function rememberDeployNote(kind, inputEl) {
-        const value = inputEl ? inputEl.value.trim() : '';
-        if (value) {
-            sessionStorage.setItem(deployNoteStorageKey(kind), value);
-        } else {
-            sessionStorage.removeItem(deployNoteStorageKey(kind));
-        }
     }
 
     /** Форматирует секунды в компактную строку «Хч Ум» для отображения затреканного времени */
@@ -1102,12 +1094,14 @@
             if (service) {
                 li.style.setProperty('--service-color', service.color);
             }
-            const modalHint = ITEM_OPENS_MODAL.has(item.code)
+            const instant = isSkillModeInstant(item);
+            const modalHint = ITEM_OPENS_MODAL.has(item.code) && !instant
                 ? `<span class="modal-hint-icon" data-tooltip="Открывает окно">${MODAL_HINT_SVG}</span>`
                 : '';
+            const title = instant ? SKILL_MODE_INSTANT_TITLES[item.code] : item.title;
             li.innerHTML =
                 `<span class="checkbox">${CHECK_SVG}</span>` +
-                `<span class="item-title">${escapeHtml(item.title)}${modalHint}</span>` +
+                `<span class="item-title">${escapeHtml(title)}${modalHint}</span>` +
                 (service ? `<span class="service-icon" style="color: ${service.color}">${service.svg}</span>` : '') +
                 `<span class="item-spinner">${spinnerHtml()}</span>` +
                 // В свободном списке очерёдности нет, перескакивать через пункты не нужно
@@ -1771,110 +1765,22 @@
         },
 
         // Закоммитить изменения — шаг режима Claude Code Skill: коммит, PR и его описание делает
-        // сам скилл, от приложения нужна только его команда в буфере. Ссылку на созданный PR
-        // (в режиме скилла пункт `pull_request`, который её обычно сохраняет, скрыт) и
-        // инструкцию выливки скилл знать не может — поэтому и то, и другое вводится здесь:
-        // ссылка ложится в тот же sessionStorage, откуда её берут остальные пункты, а
-        // инструкция оформляется блоком для вставки в описание PR (логика та же, что у
-        // `pr_description` — результат копируется сразу, генерацию и копирование можно
-        // повторять). Оба поля необязательны, отметка пункта — «Готово».
-        // Разметка разбита на три пронумерованных этапа (`.form-step`) в порядке работы:
-        // команда скилла → ссылка на PR → инструкция выливки — иначе три разнородных блока
-        // в одной полноэкранной модалке читались как одна свалка контролов
+        // сам скилл, от приложения нужна только его команда в буфере (копирование можно
+        // повторять), отметка пункта — «Готово»
         skill_commit: async (item) => {
-            // Значения читаются после закрытия модалки: элементы к этому моменту уже вынуты из
-            // DOM, но ссылки на них замыкание держит — .value остаётся тем, что ввели
-            let prLinkInput = null;
-            let databaseInput = null;
-            let configInput = null;
-            let otherInput = null;
             const confirmed = await showModal(
                 'Закоммитить изменения',
-                '<div class="form-modal">' +
-                    '<div class="form-step">' +
-                    '<div class="form-step-head">' +
-                    '<span class="form-step-num">1</span>' +
-                    '<span class="form-step-title">Отдать коммит скиллу</span>' +
-                    '</div>' +
-                    '<div class="modal-copy-actions">' +
-                    `<button type="button" class="btn btn-secondary" data-copy-btn>Скопировать ${escapeHtml(SKILL_COMMIT_COMMAND)}</button>` +
-                    '</div>' +
-                    '</div>' +
-                    '<div class="form-step">' +
-                    '<div class="form-step-head">' +
-                    '<span class="form-step-num">2</span>' +
-                    '<span class="form-step-title">Ссылка на PR (необязательно)</span>' +
-                    '</div>' +
-                    `<input type="text" class="input" data-pr-link placeholder="${escapeHtml('Вставьте ссылку на PR...')}">` +
-                    '</div>' +
-                    '<div class="form-step form-step--grow">' +
-                    '<div class="form-step-head">' +
-                    '<span class="form-step-num">3</span>' +
-                    '<span class="form-step-title">Инструкция выливки (необязательно)</span>' +
-                    '</div>' +
-                    `<textarea class="input textarea" data-database placeholder="${escapeHtml('Database — миграции, SQL...')}"></textarea>` +
-                    `<textarea class="input textarea" data-config placeholder="${escapeHtml('Config — новые параметры...')}"></textarea>` +
-                    `<textarea class="input textarea" data-other placeholder="${escapeHtml('Другое — что ещё важно...')}"></textarea>` +
-                    '<div class="modal-copy-actions">' +
-                    '<button type="button" class="btn btn-secondary" data-generate-btn>Сгенерировать</button>' +
-                    '</div>' +
-                    '<div class="snippet hidden" id="deploy-instruction-result"></div>' +
-                    '<div class="modal-copy-actions hidden" id="deploy-instruction-copy-actions">' +
-                    '<button type="button" class="btn btn-secondary" data-copy-result-btn>Скопировать</button>' +
-                    '</div>' +
-                    '</div>' +
+                '<div class="modal-copy-actions">' +
+                    `<button type="button" class="btn btn-secondary" data-copy-btn>${escapeHtml(SKILL_COMMIT_COMMAND)}</button>` +
                     '</div>',
                 [
                     { label: 'Отмена', value: false },
                     { label: 'Готово', primary: true, value: true },
                 ],
                 (bodyEl) => {
-                    prLinkInput = bodyEl.querySelector('[data-pr-link]');
-                    prLinkInput.value = sessionStorage.getItem(prLinkStorageKey()) || '';
-                    databaseInput = bodyEl.querySelector('[data-database]');
-                    configInput = bodyEl.querySelector('[data-config]');
-                    otherInput = bodyEl.querySelector('[data-other]');
-                    databaseInput.value = sessionStorage.getItem(deployNoteStorageKey('database')) || '';
-                    configInput.value = sessionStorage.getItem(deployNoteStorageKey('config')) || '';
-                    otherInput.value = sessionStorage.getItem(deployNoteStorageKey('other')) || '';
-
                     bodyEl.querySelector('[data-copy-btn]').addEventListener('click', async () => {
                         await copyText(SKILL_COMMIT_COMMAND);
                         notifyCopied(`команда «${SKILL_COMMIT_COMMAND}»`);
-                    });
-
-                    bodyEl.querySelector('[data-generate-btn]').addEventListener('click', async (e) => {
-                        const buttonEl = e.currentTarget;
-                        const database = databaseInput.value.trim();
-                        const config = configInput.value.trim();
-                        const other = otherInput.value.trim();
-                        if (!database && !config && !other) {
-                            showToast('Опишите, что нужно сделать при выливке');
-                            return;
-                        }
-
-                        setButtonLoading(buttonEl, true);
-                        try {
-                            const data = await apiCall('../api/generate_deploy_instruction.php', {
-                                database,
-                                config,
-                                other,
-                            });
-                            await copyText(data.instruction);
-                            notifyCopied('инструкция выливки');
-                            const resultEl = bodyEl.querySelector('#deploy-instruction-result');
-                            resultEl.textContent = data.instruction;
-                            resultEl.classList.remove('hidden');
-                            bodyEl.querySelector('#deploy-instruction-copy-actions').classList.remove('hidden');
-                        } catch (e) {
-                            showToast(e.message || 'Не удалось сгенерировать инструкцию выливки');
-                        } finally {
-                            setButtonLoading(buttonEl, false);
-                        }
-                    });
-                    bodyEl.querySelector('[data-copy-result-btn]').addEventListener('click', async () => {
-                        await copyText(bodyEl.querySelector('#deploy-instruction-result').textContent);
-                        notifyCopied('инструкция выливки');
                     });
                 }
             );
@@ -1882,16 +1788,6 @@
                 return;
             }
 
-            const prLink = prLinkInput ? prLinkInput.value.trim() : '';
-            if (prLink) {
-                sessionStorage.setItem(prLinkStorageKey(), prLink);
-            }
-            // Заметки о выливке ждёт пункт «Оставить описание в Jira» — он допишет их в
-            // одноимённые секции описания. Опустевшее поле убирает и заметку: иначе в описание
-            // попал бы уже отменённый пользователем пункт
-            rememberDeployNote('database', databaseInput);
-            rememberDeployNote('config', configInput);
-            rememberDeployNote('other', otherInput);
             await markDone(item.id);
         },
 
@@ -2021,7 +1917,7 @@
             let sectionsPresent = null;
             // Текст, лежащий в описании задачи сейчас, — по нему считается, есть ли что сохранять
             let sectionsText = null;
-            // Текст для поля: то же плюс дописанные ссылка на PR и заметки о выливке (их
+            // Текст для поля: то же плюс дописанная ссылка на PR (её
             // подставляет бэкенд, в самой Jira при этом ничего не меняется). Блока в описании
             // ещё нет — пустой шаблон
             let draftText = JIRA_DESCRIPTION_TEMPLATE;
@@ -2031,15 +1927,9 @@
                 const status = await apiCall('../api/jira_description_sections.php', {
                     task_id: state.task.id,
                     pr_link: prLink,
-                    // Заметки о базе и конфиге из шага «Закоммитить изменения» — бэкенд дописывает
-                    // их в одноимённые секции блока так же, как ссылку на PR, а «Другое» —
-                    // в скобках к последнему PR
-                    database: sessionStorage.getItem(deployNoteStorageKey('database')) || '',
-                    config: sessionStorage.getItem(deployNoteStorageKey('config')) || '',
-                    other: sessionStorage.getItem(deployNoteStorageKey('other')) || '',
                 });
                 // draft приходит с дописанными пунктами и когда Jira недоступна (available:
-                // false) — иначе введённая ссылка на PR и заметки о выливке пропадали бы из
+                // false) — иначе введённая ссылка на PR пропадала бы из
                 // поля вместе с ошибкой чтения. Недоступность запрещает только запись в описание
                 draftText = status.draft;
                 sectionsPresent = status.available ? Boolean(status.has_sections) : null;
@@ -2060,12 +1950,6 @@
                     '<div class="modal-copy-actions modal-copy-actions--row">' +
                     '<button type="button" class="btn btn-secondary" data-copy-btn>Скопировать</button>' +
                     '<button type="button" class="btn btn-secondary" data-save-btn></button>' +
-                    // секцию Results заполняет скилл Claude Code — команда нужна только тем задачам,
-                    // которые ведутся через него (флаг задачи, а не состав чек-листа: сам пункт им не скрыт)
-                    (isTaskFlagEnabled(state.task, 'claude_code_skill_mode')
-                        ? '<button type="button" class="btn btn-secondary" data-copy-results-btn>' +
-                          '[Claude] Results</button>'
-                        : '') +
                     '</div></div>',
                 [
                     { label: 'Отмена', value: false },
@@ -2114,10 +1998,6 @@
                             setButtonLoading(button, false);
                             syncSaveButton();
                         }
-                    });
-                    bodyEl.querySelector('[data-copy-results-btn]')?.addEventListener('click', async () => {
-                        await copyText(SKILL_COMMIT_RESULTS_COMMAND);
-                        notifyCopied(`команда «${SKILL_COMMIT_RESULTS_COMMAND}»`);
                     });
                 }
             );
@@ -2229,6 +2109,10 @@
         if (STRICT_ORDER && item.is_done) {
             return;
         }
+        if (isSkillModeInstant(item)) {
+            markDone(item.id);
+            return;
+        }
         const handler = ITEM_HANDLERS[item.code];
         if (handler) {
             handler(item);
@@ -2271,9 +2155,6 @@
         const data = await apiCall('../api/finish.php', { task_id: state.task.id });
         state.checklist = data.checklist;
         sessionStorage.removeItem(prLinkStorageKey());
-        sessionStorage.removeItem(deployNoteStorageKey('database'));
-        sessionStorage.removeItem(deployNoteStorageKey('config'));
-        sessionStorage.removeItem(deployNoteStorageKey('other'));
         renderChecklist();
         showToast('Чек-лист сброшен');
     });
