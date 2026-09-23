@@ -2524,8 +2524,14 @@
                     // (танцует вокруг его центра), так что без затреканного времени всё равно
                     // рисовалась бы полоска «фантомного» зелёного слева от бегунка после того как
                     // его увели вправо. При нуле уже-затреканного зелёного быть не должно вообще.
-                    range.style.setProperty('--base', `${baseMinutes === 0 ? 0 : centerOf(baseMinutes)}px`);
-                    range.style.setProperty('--fill', `${thumbCenter}px`);
+                    // Вторая поправка того же рода — у правого края: центр бегунка в максимуме
+                    // отстоит от края жёлоба на свой радиус, и заполнение по центру оставляло бы
+                    // справа серый хвост, из-за которого доведённый до конца ползунок выглядит
+                    // недоведённым. В максимуме тянем заливку до самого края.
+                    const edgeOf = (minutes) =>
+                        minutes >= maxMinutes ? range.clientWidth : centerOf(minutes);
+                    range.style.setProperty('--base', `${baseMinutes === 0 ? 0 : edgeOf(baseMinutes)}px`);
+                    range.style.setProperty('--fill', `${edgeOf(value)}px`);
                     if (hasLunch) {
                         range.style.setProperty('--lunch-a', `${centerOf(lunchFrom)}px`);
                         range.style.setProperty('--lunch-b', `${centerOf(lunchTo)}px`);
@@ -2567,18 +2573,25 @@
                         // там рядом не бывает — normalizePosition не даёт бегунку стоять в обеде)
                         const lunchFromPx = hasLunch ? centerOf(lunchFrom) : null;
                         const lunchToPx = hasLunch ? centerOf(lunchTo) : null;
+                        // Пересечение проверяется по ПРАВОЙ границе обеда, а не по левой:
+                        // бегунок часто стоит ровно на начале обеда (normalizePosition не даёт
+                        // ему остановиться внутри), и при сравнении lunchFromPx > guideFrom
+                        // такой случай не считался пересечением — полоска закрашивала обед целиком
                         const splitByLunch =
-                            hasLunch && lunchFromPx > guideFrom && lunchFromPx < guideTo;
+                            hasLunch && lunchToPx > guideFrom && lunchFromPx < guideTo;
+                        const firstTo = splitByLunch
+                            ? Math.max(guideFrom, lunchFromPx)
+                            : guideTo;
 
                         nowGuide.style.display = 'block';
                         nowGuide.style.left = `${guideFrom}px`;
-                        nowGuide.style.width =
-                            `${Math.max(0, (splitByLunch ? lunchFromPx : guideTo) - guideFrom)}px`;
+                        nowGuide.style.width = `${Math.max(0, firstTo - guideFrom)}px`;
 
                         if (splitByLunch && lunchToPx < guideTo) {
+                            const secondFrom = Math.max(guideFrom, lunchToPx);
                             nowGuide2.style.display = 'block';
-                            nowGuide2.style.left = `${lunchToPx}px`;
-                            nowGuide2.style.width = `${guideTo - lunchToPx}px`;
+                            nowGuide2.style.left = `${secondFrom}px`;
+                            nowGuide2.style.width = `${guideTo - secondFrom}px`;
                         } else {
                             nowGuide2.style.display = 'none';
                         }
