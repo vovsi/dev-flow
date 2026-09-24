@@ -2013,6 +2013,10 @@
             const command = state.task && state.task.task_link
                 ? `${SKILL_REVIEW_JIRA_COMMAND} ${state.task.task_link}`
                 : SKILL_REVIEW_JIRA_COMMAND;
+            // Проверка может найти, что поправить в коде, — тогда цикл идёт заново с коммита.
+            // «Закоммитить изменения» есть только в режиме Claude Code Skill, поэтому кнопка
+            // показывается по составу чек-листа, а не по флагу задачи
+            const canRewindToCommit = state.checklist.some((i) => i.code === 'skill_commit');
             const confirmed = await showModal(
                 'Проверить Jira задачу',
                 '<div class="modal-copy-actions">' +
@@ -2020,6 +2024,9 @@
                     '</div>',
                 [
                     { label: 'Отмена', value: false },
+                    ...(canRewindToCommit
+                        ? [{ label: 'Вернуться к «Закоммитить изменения»', value: 'rewind' }]
+                        : []),
                     { label: 'Готово', primary: true, value: true },
                 ],
                 (bodyEl) => {
@@ -2029,6 +2036,11 @@
                     });
                 }
             );
+            if (confirmed === 'rewind') {
+                await rewindTo('skill_commit');
+                showToast('Закоммитьте изменения заново');
+                return;
+            }
             if (!confirmed) {
                 return;
             }
