@@ -95,13 +95,17 @@ database is just a file next to the code.
 ## Claude Code skill mode (per task)
 
 Every task carries its own `claude_code_skill_mode` flag (`tasks.claude_code_skill_mode` in the
-database) — **on by default**. While it's on, `Закоммитить код`, `Создать PR`, `Проверить PR
-Claude Code` and `Указать описание PR` are hidden from the table above, and two items appear
-instead right after `Создать ветку в Git`. The first, `Написать код` *(write the code)*, just
+database) — **on by default**. While it's on, `Создать ветку в Git`, `Закоммитить код`, `Создать PR`,
+`Проверить PR Claude Code` and `Указать описание PR` are hidden from the table above, and three
+items appear instead. The first, `Checkout Git Branch`, replaces `Создать ветку в Git`: a single
+button copies `/branch <argument>` for the Claude Code skill that creates and checks out the
+branch — the argument is the task's saved branch name if it already has one, otherwise the Jira
+task link; the button shows the full command, so you see which one the skill gets. `Готово`
+*(done)* ticks the item. The second, `Написать код` *(write the code)*, just
 copies commands for the Claude Code skill: `/implement-task`, which implements the task (the Jira
 task link is appended after a space so the skill knows which task to work on), and `/document-api`,
 which documents the API — copied as is. The item is
-ticked with `Готово` *(done)* when the skill is finished. The second, `Закоммитить изменения`
+ticked with `Готово` *(done)* when the skill is finished. The third, `Закоммитить изменения`
 *(commit the changes)*, is a single button that copies the `/commit` command for the skill that's
 assumed to handle the commit, the PR, its description and the review for you; `Готово` *(done)*
 ticks the item. The skill also writes the task description in Jira, so in this mode

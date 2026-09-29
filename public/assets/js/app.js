@@ -26,6 +26,10 @@
         return url ? ` См.: ${url}` : '';
     }
 
+    /** Команда скилла Claude Code, который переключает репозитории на ветку задачи (пункт
+     * `skill_branch`, виден только при включённом у задачи флаге claude_code_skill_mode — чип «Claude Skill») */
+    const SKILL_BRANCH_COMMAND = '/branch';
+
     /** Команда скилла Claude Code, который пишет код задачи (пункт `skill_code`,
      * виден только при включённом у задачи флаге claude_code_skill_mode — чип «Claude Skill») */
     const SKILL_IMPLEMENT_COMMAND = '/implement-task';
@@ -352,6 +356,7 @@
     const ITEM_OPENS_MODAL = new Set([
         'story_points',
         'git_branch',
+        'skill_branch',
         'skill_code',
         'skill_commit',
         'code_written',
@@ -442,6 +447,7 @@
         story_points: 'jira',
         status_doing: 'jira',
         git_branch: 'git',
+        skill_branch: 'git',
         skill_code: 'php',
         skill_commit: 'claude',
         code_written: 'php',
@@ -1724,6 +1730,36 @@
             );
             if (!link) return;
             sessionStorage.setItem(prLinkStorageKey(), link);
+            await markDone(item.id);
+        },
+
+        // Checkout Git Branch — шаг режима Claude Code Skill вместо «Создать ветку в Git»: ветку
+        // создаёт и переключает скилл, приложение только отдаёт его команду в буфер. Аргумент —
+        // уже сохранённая у задачи ветка, а если её нет — ссылка на задачу (по ней скилл сам
+        // сгенерирует имя). Аргумент виден на кнопке целиком: по нему видно, что именно уйдёт скиллу
+        skill_branch: async (item) => {
+            const target = (state.task && (state.task.git_branch || state.task.task_link)) || '';
+            const command = target ? `${SKILL_BRANCH_COMMAND} ${target}` : SKILL_BRANCH_COMMAND;
+            const confirmed = await showModal(
+                'Checkout Git Branch',
+                '<div class="modal-copy-actions">' +
+                    `<button type="button" class="btn btn-secondary btn-command" data-copy-btn>${escapeHtml(command)}</button>` +
+                    '</div>',
+                [
+                    { label: 'Отмена', value: false },
+                    { label: 'Готово', primary: true, value: true },
+                ],
+                (bodyEl) => {
+                    bodyEl.querySelector('[data-copy-btn]').addEventListener('click', async () => {
+                        await copyText(command);
+                        notifyCopied(`команда «${command}»`);
+                    });
+                }
+            );
+            if (!confirmed) {
+                return;
+            }
+
             await markDone(item.id);
         },
 

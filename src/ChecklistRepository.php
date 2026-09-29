@@ -70,6 +70,7 @@ final class ChecklistRepository
      * то есть было бы необратимым.
      */
     private const CLAUDE_CODE_SKILL_MODE_HIDDEN_CODES = [
+        'git_branch',
         'code_written',
         'pull_request',
         'claude_review',
@@ -82,6 +83,7 @@ final class ChecklistRepository
      * скилла, в обычном процессе их делать нечем.
      */
     private const CLAUDE_CODE_SKILL_MODE_ONLY_CODES = [
+        'skill_branch',
         'skill_code',
         'skill_commit',
     ];
