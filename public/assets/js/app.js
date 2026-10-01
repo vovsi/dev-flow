@@ -1736,18 +1736,32 @@
         // Checkout Git Branch — шаг режима Claude Code Skill вместо «Создать ветку в Git»: ветку
         // создаёт и переключает скилл, приложение только отдаёт его команду в буфер. Аргумент —
         // уже сохранённая у задачи ветка, а если её нет — ссылка на задачу (по ней скилл сам
-        // сгенерирует имя). Аргумент виден на кнопке целиком: по нему видно, что именно уйдёт скиллу
+        // сгенерирует имя). Аргумент виден на кнопке целиком: по нему видно, что именно уйдёт скиллу.
+        // Во втором случае имя ветки придумал скилл, и приложение его не знает — поэтому под
+        // командой поле, чтобы вписать созданную ветку и сохранить её в задаче по «Готово»
         skill_branch: async (item) => {
-            const target = (state.task && (state.task.git_branch || state.task.task_link)) || '';
+            const savedBranch = (state.task && state.task.git_branch) || '';
+            const target = savedBranch || (state.task && state.task.task_link) || '';
             const command = target ? `${SKILL_BRANCH_COMMAND} ${target}` : SKILL_BRANCH_COMMAND;
-            const confirmed = await showModal(
+            const askBranch = !savedBranch;
+            const result = await showModal(
                 'Checkout Git Branch',
                 '<div class="modal-copy-actions">' +
                     `<button type="button" class="btn btn-secondary btn-command" data-copy-btn>${escapeHtml(command)}</button>` +
-                    '</div>',
+                    '</div>' +
+                    (askBranch
+                        ? `<input type="text" class="input modal-field" data-branch-input placeholder="${escapeHtml('Ветка, созданная скиллом')}">`
+                        : ''),
                 [
-                    { label: 'Отмена', value: false },
-                    { label: 'Готово', primary: true, value: true },
+                    { label: 'Отмена', value: null },
+                    {
+                        label: 'Готово',
+                        primary: true,
+                        getValue: () => {
+                            const input = modalBodyEl.querySelector('[data-branch-input]');
+                            return { branch: input ? input.value.trim() : '' };
+                        },
+                    },
                 ],
                 (bodyEl) => {
                     bodyEl.querySelector('[data-copy-btn]').addEventListener('click', async () => {
@@ -1756,11 +1770,12 @@
                     });
                 }
             );
-            if (!confirmed) {
+            if (!result) {
                 return;
             }
 
-            await markDone(item.id);
+            // Пустое поле — ветку просто не трогаем: toggle.php обновляет её только непустой
+            await markDone(item.id, result.branch ? { branch: result.branch } : {});
         },
 
         // Написать код — шаг режима Claude Code Skill: сам код пишет скилл Claude Code, от

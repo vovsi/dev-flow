@@ -100,8 +100,10 @@ database) — **on by default**. While it's on, `Создать ветку в Gi
 items appear instead. The first, `Checkout Git Branch`, replaces `Создать ветку в Git`: a single
 button copies `/branch <argument>` for the Claude Code skill that creates and checks out the
 branch — the argument is the task's saved branch name if it already has one, otherwise the Jira
-task link; the button shows the full command, so you see which one the skill gets. `Готово`
-*(done)* ticks the item. The second, `Написать код` *(write the code)*, just
+task link; the button shows the full command, so you see which one the skill gets. When the
+argument is the task link, a text field below the button lets you paste the branch the skill
+created — `Готово` *(done)* saves it to the task (shown at the bottom of the screen) and ticks the
+item; leave it empty to just tick the item. The second, `Написать код` *(write the code)*, just
 copies commands for the Claude Code skill: `/implement-task`, which implements the task (the Jira
 task link is appended after a space so the skill knows which task to work on), and `/document-api`,
 which documents the API — copied as is. The item is
