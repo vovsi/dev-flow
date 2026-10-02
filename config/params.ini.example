@@ -124,9 +124,10 @@ stale_blocked_hours = 24
 ; Заработок за день в модалке поздравления (появляется, когда трек времени за день достигает
 ; [worktime].daily_hours) — оклад в USD/месяц делится на условное число рабочих часов в месяце
 ; (working_days_per_month × daily_hours), затем пересчитывается в валюту из [currency].
-; Необязательно — по умолчанию 1500 и 21 (см. Config::SALARY_DEFAULTS).
+; monthly_usd — оклад в USD/месяц; не задан — строка заработка в модалке просто не показывается.
+; working_days_per_month — необязательно, по умолчанию 21 (см. Config::SALARY_DEFAULTS).
 [salary]
-monthly_usd = 1500
+monthly_usd =
 working_days_per_month = 21
 
 ; Валюта, в которой показывается заработок в модалке поздравления.

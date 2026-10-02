@@ -587,7 +587,7 @@ plus a motivational quote.
 
 ```ini
 [salary]
-monthly_usd = 1500
+monthly_usd = 2000          ; your monthly salary in USD — no default
 working_days_per_month = 21
 
 [currency]
@@ -599,7 +599,9 @@ exchange_rate_url = "https://open.er-api.com/v6/latest/USD"
 quotes_url = "https://zenquotes.io/api/random"
 ```
 
-All optional — the defaults are shown above. The hourly rate is
+`monthly_usd` has **no default** (it's personal data, so it lives only in `params.ini`): leave it
+unset and the earnings line is simply omitted from the modal. Everything else is optional — the
+defaults are shown above. The hourly rate is
 `monthly_usd / (working_days_per_month × daily_hours)`, and the amount is then converted into
 `[currency].code` at the rate from `exchange_rate_url` (cached for 6 hours in
 `storage/exchange_rate_cache.json`). A day always pays as a **full** day: even if you close it

@@ -36,9 +36,11 @@ final class Config
     /** Порог показателя «зависшие Blocked» по умолчанию, часов (см. staleBlockedHours()) */
     public const STALE_BLOCKED_HOURS_DEFAULT = 24;
 
-    /** Значения [salary] по умолчанию (см. salaryHourlyRateUsd()) */
+    /**
+     * Значения [salary] по умолчанию (см. salaryHourlyRateUsd()). Оклада здесь нет намеренно:
+     * это личные данные, они живут только в config/params.ini.
+     */
     public const SALARY_DEFAULTS = [
-        'monthly_usd' => 1500.0,
         'working_days_per_month' => 21.0,
     ];
 
@@ -312,16 +314,17 @@ final class Config
     /**
      * Часовая ставка в USD для расчёта заработка за день в модалке поздравления
      * (EarningsService, показывается при достижении [worktime].daily_hours) — оклад в месяц
-     * делится на условное число рабочих часов в месяце. Некорректные значения (≤ 0) молча
-     * заменяются на SALARY_DEFAULTS, как и у workTime().
+     * делится на условное число рабочих часов в месяце. Оклад не задан (или ≤ 0) — null,
+     * фича заработка отключается; некорректное число рабочих дней молча заменяется на
+     * SALARY_DEFAULTS, как и у workTime().
      */
-    public static function salaryHourlyRateUsd(): float
+    public static function salaryHourlyRateUsd(): ?float
     {
         $section = self::load()['salary'] ?? [];
 
         $monthlyUsd = (float) ($section['monthly_usd'] ?? 0);
         if ($monthlyUsd <= 0) {
-            $monthlyUsd = self::SALARY_DEFAULTS['monthly_usd'];
+            return null;
         }
 
         $workingDays = (float) ($section['working_days_per_month'] ?? 0);

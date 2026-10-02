@@ -395,10 +395,12 @@ task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id)
   `api_data_format` (`Config::reviewDocLinks()` → `window.DEVFLOW_CONFIG.reviewDocLinks` →
   `reviewDocRef()` в `app.js`). Адреса конкретного инстанса Confluence, поэтому в коде их нет;
   ключ не задан — ссылка в промпт просто не подставляется, сам пункт остаётся.
-- **`[salary]`** — `monthly_usd`/`working_days_per_month` (дефолты 1500/21,
-  `Config::SALARY_DEFAULTS`) для расчёта часовой ставки (`Config::salaryHourlyRateUsd()` =
-  `monthly_usd / (working_days_per_month * daily_hours)`) — единственный потребитель:
-  `EarningsService` в модалке поздравления.
+- **`[salary]`** — `monthly_usd`/`working_days_per_month` для расчёта часовой ставки
+  (`Config::salaryHourlyRateUsd()` = `monthly_usd / (working_days_per_month * daily_hours)`) —
+  единственный потребитель: `EarningsService` в модалке поздравления. **У оклада дефолта в коде
+  нет** (личные данные — только в `params.ini`): не задан — `salaryHourlyRateUsd()` отдаёт
+  `null`, `api/calc_earnings.php` отвечает 422, строка заработка в модалке не показывается.
+  У `working_days_per_month` дефолт 21 (`Config::SALARY_DEFAULTS`).
 - **`[currency]`** — `code` (код валюты для курса USD→X у `ExchangeRateClient`) и `label`
   (подпись рядом с суммой, «грн»); дефолты `UAH`/`грн` — `Config::CURRENCY_DEFAULTS`.
   Подпись уходит на фронт в ответе `api/calc_earnings.php` (`currency_label`), **а не зашита
@@ -433,7 +435,7 @@ task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id)
   проекта, которая пишет за пределы контейнера** — см. «Безопасность» про то, почему
   смонтирован только сам файл, а не весь `~/.claude`.
 
-Некорректные/отсутствующие значения `[worktime]`, `[dashboard]`, `[salary]`, `[currency]` и `[services]` молча
+Некорректные/отсутствующие значения `[worktime]`, `[dashboard]`, `[salary]` (кроме оклада — см. выше), `[currency]` и `[services]` молча
 заменяются дефолтами (не роняют приложение); отсутствие `[atlassian]`/`[llm]` отключает
 соответствующие фичи целиком; отсутствие `[git]`/`[templates]`/`[docs]` просто убирает
 из интерфейса и текстов соответствующие куски, а отсутствие `[claude]` — только канал Telegram
