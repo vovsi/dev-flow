@@ -2971,12 +2971,42 @@
     loadDashboard();
     loadClaudeSettings();
 
-    /** Возврат к окну обновляет и индикатор времени, и показатели дашборда — у каждого свой
-     * троттлинг, но событие и проверка видимости общие */
+    /**
+     * Возврат к окну перечитывает открытую задачу из Jira: статус и доступные переходы
+     * (а от них — видимость `status_doing`/`status_pull_request`) снимаются только при
+     * синхронизации, и задачу, переведённую руками в Jira, чек-лист иначе не замечал бы до
+     * переоткрытия. Пока открыта модалка или пункт в работе/анимации — не трогаем: перерисовка
+     * под ними сломала бы текущее действие, догоним на следующем возврате.
+     */
+    let taskSyncedAt = 0;
+    async function refreshTaskOnReturn() {
+        if (!state.task || taskScreen.classList.contains('hidden')) return;
+        if (Date.now() - taskSyncedAt < BACKGROUND_REFRESH_MS) return;
+        if (!modalOverlay.classList.contains('hidden')) return;
+        // В строгом режиме видимый .done — это пункт, который ещё улетает
+        if (checklistEl.querySelector(STRICT_ORDER ? 'li.loading, li.leaving, li.done' : 'li.loading, li.leaving')) return;
+
+        taskSyncedAt = Date.now();
+        const taskId = state.task.id;
+        try {
+            const data = await apiCall('../api/state.php', { link: state.task.task_link, refresh_jira: true });
+            // За время запроса могли открыть другую задачу или модалку — тогда ответ уже не к месту
+            if (!state.task || state.task.id !== taskId || !modalOverlay.classList.contains('hidden')) return;
+            state.task = data.task;
+            state.checklist = data.checklist;
+            showTaskScreen();
+        } catch (e) {
+            // Фоновое обновление — ошибку не показываем, остаётся то, что было
+        }
+    }
+
+    /** Возврат к окну обновляет индикатор времени, показатели дашборда и открытую задачу —
+     * у каждого свой троттлинг, но событие и проверка видимости общие */
     function refreshOnReturn() {
         if (document.visibilityState !== 'visible') return;
         refreshTodayTimeSpentOnReturn();
         refreshDashboardOnReturn();
+        refreshTaskOnReturn();
     }
 
     // Оба события нужны: visibilitychange ловит возврат к свёрнутому окну/неактивной вкладке,

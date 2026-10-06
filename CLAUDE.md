@@ -567,6 +567,10 @@ task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id)
   `ChecklistRepository::getStatusesForTask()` (`HIDE_IF_ALREADY_IN_DOING_STATUS_CODE`).
   Смысл именно в реальном статусе, а не в отметке чек-листа: задачу могли перевести в работу
   руками в Jira или с доски, и тогда шаг не «ещё не сделан», а не нужен.
+  Флаги статуса/переходов — снимок на момент синхронизации, поэтому открытая задача
+  перечитывается из Jira и при возврате фокуса к окну (`refreshTaskOnReturn()` в `app.js`,
+  `api/state.php` с `refresh_jira`, тот же троттлинг `BACKGROUND_REFRESH_MS`); пока открыта
+  модалка или пункт в загрузке/анимации — пропускается, чтобы не перерисовать список под ними.
 - **Пункт «Перевести задачу в Pull Request» показывается только если в workflow задачи такой
   переход вообще есть.** Флаг `tasks.pull_request_transition_available` обновляется при каждой
   синхронизации: `JiraClient::fetchIssue()` просит переходы тем же запросом

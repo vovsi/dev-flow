@@ -79,7 +79,7 @@ database is just a file next to the code.
 | Step | What the app does | Integration needed |
 |---|---|---|
 | Указать Story Points *(set Story Points)* | A modal with 1/2/3/5/8/13/21 (the team poker deck without the non-numeric `?` and `∞` cards) → writes the field in Jira. The item is hidden if Story Points are already set on the task | Jira |
-| Перевести в статус Doing *(transition to Doing)* | Transitions the Jira task to the status from your config. The item is hidden if the task is already in that status in Jira (for example, you moved it there by hand) | Jira |
+| Перевести в статус Doing *(transition to Doing)* | Transitions the Jira task to the status from your config. The item is hidden if the task is already in that status in Jira (for example, you moved it there by hand). The open task is re-read from Jira when you come back to the window (at most once a minute), so a status changed in Jira shows up without reopening the task | Jira |
 | Создать ветку в Git *(create a git branch)* | Generates a branch name with the LLM from the task title, copies it to the clipboard, stores it in the DB. The item is hidden once the task already has a branch name saved — the name itself stays at the bottom of the screen with its git commands dropdown | LLM (optional) |
 | Закоммитить код *(commit the code)* | A "what did you do" field → the LLM builds the commit message subject line in Conventional Commits form with the Jira key | LLM |
 | Создать PR *(create the PR)* | Hands you a ready `gh pr create --draft` command with your reviewers, then asks for the link to the PR you created | GitHub CLI |
