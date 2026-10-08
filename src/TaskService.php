@@ -168,6 +168,9 @@ final class TaskService
 
         $this->jiraSync->transitionToPullRequest($task);
         $this->checklist->setDone($taskId, $checklistId, true);
+        // Новый статус меняет флаги показа пунктов (in_doing_status, pull_request_transition_available) —
+        // без пересинхронизации пункт перехода в PR остался бы скрытым до фонового обновления.
+        $task = $this->syncJira($task);
 
         return [
             'task' => $task,
@@ -192,6 +195,9 @@ final class TaskService
 
         $this->jiraSync->transitionToDoing($task);
         $this->checklist->setDone($taskId, $checklistId, true);
+        // Новый статус меняет флаги показа пунктов (in_doing_status, pull_request_transition_available) —
+        // без пересинхронизации пункт перехода в PR остался бы скрытым до фонового обновления.
+        $task = $this->syncJira($task);
 
         return [
             'task' => $task,
