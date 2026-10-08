@@ -285,8 +285,8 @@ task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id)
   для LLM-генерации (`BranchNameService`, `CommitMessageService`).
 - `tasks.story_points_set` — признак того, что в самой задаче Jira Story Points уже проставлен,
   обновляется при каждой синхронизации — см. правило показа пункта `story_points` ниже.
-- `tasks.in_doing_status` — текущий статус задачи в Jira входит в `[atlassian].doing_status`,
-  обновляется при каждой синхронизации — см. правило показа пункта `status_doing` ниже.
+- `tasks.in_doing_status` — задача в Jira уже взята в работу: текущий статус входит в
+  `[atlassian].doing_status` либо вне категории «To Do» (Pull request, Blocked, Done…), обновляется при каждой синхронизации — см. правило показа пункта `status_doing` ниже.
 - `tasks.pull_request_transition_available` — в workflow задачи есть доступный переход в
   `[atlassian].pull_request_status`, обновляется при каждой синхронизации — см. правило показа
   пункта `status_pull_request` ниже. Дефолт `1` (а не `0`, как у остальных снятых из Jira
@@ -562,11 +562,15 @@ task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id)
 - **Пункт «Перевести в статус Doing» показывается только если задача в Jira ещё не в рабочем
   статусе.** Правило устроено точно так же, как у `story_points`: флаг `tasks.in_doing_status`
   обновляется при каждой синхронизации (`JiraSyncService::sync()` → `JiraClient::fetchIssue()`
-  читает `fields.status.name` и сравнивает его без учёта регистра со списком
-  `Config::atlassianDoingStatuses()` — тем же, по которому ищется переход), фильтрация — в SQL
+  `isTakenIntoWork()`: статус вне категории «To Do» (`fields.status.statusCategory.key` ≠ `new`)
+  либо `fields.status.name` без учёта регистра входит в `Config::atlassianDoingStatuses()` — тот
+  же список, по которому ищется переход), фильтрация — в SQL
   `ChecklistRepository::getStatusesForTask()` (`HIDE_IF_ALREADY_IN_DOING_STATUS_CODE`).
   Смысл именно в реальном статусе, а не в отметке чек-листа: задачу могли перевести в работу
   руками в Jira или с доски, и тогда шаг не «ещё не сделан», а не нужен.
+  **Сравнения только с Doing мало** — пока задача в Doing, пункт скрыт и не отмечен, и после
+  перевода дальше по workflow (Pull request) он возвращался в чек-лист невыполненным. Поэтому
+  «уже в работе» — это и любой статус после «To Do».
   Флаги статуса/переходов — снимок на момент синхронизации, поэтому открытая задача
   перечитывается из Jira и при возврате фокуса к окну (`refreshTaskOnReturn()` в `app.js`,
   `api/state.php` с `refresh_jira`, тот же троттлинг `BACKGROUND_REFRESH_MS`); пока открыта
@@ -653,7 +657,7 @@ task_checklist(id, task_id, checklist_id, is_done, UNIQUE(task_id, checklist_id)
 | code | Заголовок | Сервис | Поведение |
 |---|---|---|---|
 | `story_points` | Указать Story Points | Jira | Модалка выбора значения (`STORY_POINTS_OPTIONS`: 1/2/3/5/8/13/21 — покерная колода команды без нечисловых карт `?` и `∞`, их поле Story Points в Jira не принимает; с описанием сложности для каждого) → «Подтвердить» отправляет `api/update_story_points.php` → отмечается только при успешном ответе Jira (тот же паттерн, что у `status_doing`/`status_pull_request`) |
-| `status_doing` | Перевести в статус Doing | Jira | Переводит задачу в Jira в статус из `config/params.ini` (`atlassian.doing_status`, по умолчанию «Doing») через `api/transition_doing.php` → отмечается только при успешном переходе в Jira (тот же паттерн, что у `status_pull_request`/`transition_pull_request.php`). Пункт скрыт, если задача в Jira уже в этом статусе (см. бизнес-правила) |
+| `status_doing` | Перевести в статус Doing | Jira | Переводит задачу в Jira в статус из `config/params.ini` (`atlassian.doing_status`, по умолчанию «Doing») через `api/transition_doing.php` → отмечается только при успешном переходе в Jira (тот же паттерн, что у `status_pull_request`/`transition_pull_request.php`). Пункт скрыт, если задача в Jira уже в этом статусе или дальше по workflow — вне категории «To Do» (см. бизнес-правила) |
 | `git_branch` | Создать ветку в Git | Git | Запросить название ветки (кнопка «Сгенерировать» предлагает вариант через `api/generate_branch_name.php` → `BranchNameService`, LLM по заголовку/описанию задачи из Jira) → скопировать → сохранить в `tasks.git_branch` → отметить. Пункт скрыт, если ветка у задачи уже сохранена (см. бизнес-правила) |
 | `skill_branch` | Checkout Git Branch | Git | **Только пока у задачи включён `claude_code_skill_mode`** — заменяет `git_branch` (тот в этом режиме скрыт, см. `CLAUDE_CODE_SKILL_MODE_HIDDEN_CODES`). Ветку создаёт/переключает скилл Claude Code, приложение только отдаёт его команду в буфер: модалка-карточка с единственной кнопкой в `.modal-copy-actions` — `/branch <аргумент>` (`SKILL_BRANCH_COMMAND` в `app.js`), где аргумент — `tasks.git_branch`, если ветка у задачи уже сохранена, иначе `tasks.task_link`. **В отличие от `skill_code`/`review_jira_task`, аргумент показывается на подписи кнопки целиком** — по нему видно, ветку или ссылку получит скилл; длинная подпись переносится по любому символу (`.btn-command`), иначе не влезла бы в 500×500. Если аргумент — ссылка на задачу (ветки у задачи ещё нет), под кнопкой поле «Ветка, созданная скиллом» (`data-branch-input`): имя придумал скилл, приложение его не знает. Копировать можно повторно → «Готово» отмечает пункт и, если поле заполнено, сохраняет ветку в `tasks.git_branch` (тот же `branch` в `api/toggle.php`, что у `git_branch`); пустое поле ветку не трогает |
 | `skill_code` | Написать код | PHP | **Только пока у задачи включён `claude_code_skill_mode`** (чип «Claude Skill» под кодом задачи, см. `CLAUDE_CODE_SKILL_MODE_ONLY_CODES`). Сам код пишет скилл Claude Code, приложение только отдаёт его команды в буфер: модалка с двумя кнопками копирования в `.modal-copy-actions` — `/implement-task` (`SKILL_IMPLEMENT_COMMAND` в `app.js`) и `/document-api` (`SKILL_DOCUMENT_API_COMMAND`, документирование API делает тот же скилл на том же шаге, поэтому отдельного пункта чек-листа под него нет); копировать можно повторно, обе кнопки обслуживает один обработчик по `data-command`. У `/implement-task` в буфер уходит команда **со ссылкой на задачу через пробел** (`tasks.task_link` из `state.task`) — сам скилл её ниоткуда не возьмёт; на подписи кнопки ссылка не показывается (в окне 500×500 она не влезает). `/document-api` копируется как есть, без ссылки → «Готово» отмечает пункт |

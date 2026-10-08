@@ -47,7 +47,9 @@ final class JiraClient
             'title' => (string) ($data['fields']['summary'] ?? ''),
             'description' => $data['renderedFields']['description'] ?? null,
             'story_points_set' => ($data['fields'][$this->storyPointsFieldId] ?? null) !== null,
-            'in_doing_status' => $this->isDoingStatus((string) ($data['fields']['status']['name'] ?? '')),
+            'in_doing_status' => $this->isTakenIntoWork(
+                is_array($data['fields']['status'] ?? null) ? $data['fields']['status'] : []
+            ),
             'pull_request_transition_available' => $this->matchTransitionId(
                 is_array($data['transitions'] ?? null) ? $data['transitions'] : [],
                 $this->pullRequestStatusNames
@@ -56,12 +58,21 @@ final class JiraClient
     }
 
     /**
-     * Текущий статус задачи — один из $doingStatusNames. Сравнение регистронезависимое и по
-     * тому же списку, по которому ищется переход в Doing: иначе задача, уже переведённая в
-     * работу руками в Jira, считалась бы непереведённой.
+     * Задача уже взята в работу: текущий статус — один из $doingStatusNames, либо он вообще
+     * вне категории «To Do» (Pull request, Blocked, Done…). Только сравнения с Doing мало:
+     * после перевода дальше по workflow пункт «Перевести в статус Doing», так и не отмеченный
+     * (пока задача была в Doing, он был скрыт), возвращался в чек-лист.
+     * Имена сравниваются регистронезависимо и по тому же списку, по которому ищется переход.
      */
-    private function isDoingStatus(string $statusName): bool
+    private function isTakenIntoWork(array $status): bool
     {
+        // 'new' — ключ категории «To Do», он не зависит от языка и названий статусов в workflow
+        $categoryKey = (string) ($status['statusCategory']['key'] ?? '');
+        if ($categoryKey !== '' && $categoryKey !== 'new') {
+            return true;
+        }
+
+        $statusName = (string) ($status['name'] ?? '');
         if ($statusName === '') {
             return false;
         }

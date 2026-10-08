@@ -79,7 +79,7 @@ database is just a file next to the code.
 | Step | What the app does | Integration needed |
 |---|---|---|
 | Указать Story Points *(set Story Points)* | A modal with 1/2/3/5/8/13/21 (the team poker deck without the non-numeric `?` and `∞` cards) → writes the field in Jira. The item is hidden if Story Points are already set on the task | Jira |
-| Перевести в статус Doing *(transition to Doing)* | Transitions the Jira task to the status from your config. The item is hidden if the task is already in that status in Jira (for example, you moved it there by hand). The open task is re-read from Jira when you come back to the window (at most once a minute), so a status changed in Jira shows up without reopening the task | Jira |
+| Перевести в статус Doing *(transition to Doing)* | Transitions the Jira task to the status from your config. The item is hidden once the task is already in that status in Jira (for example, you moved it there by hand) or anywhere past "To Do" (Pull request, Blocked, Done…). The open task is re-read from Jira when you come back to the window (at most once a minute), so a status changed in Jira shows up without reopening the task | Jira |
 | Создать ветку в Git *(create a git branch)* | Generates a branch name with the LLM from the task title, copies it to the clipboard, stores it in the DB. The item is hidden once the task already has a branch name saved — the name itself stays at the bottom of the screen with its git commands dropdown | LLM (optional) |
 | Закоммитить код *(commit the code)* | A "what did you do" field → the LLM builds the commit message subject line in Conventional Commits form with the Jira key | LLM |
 | Создать PR *(create the PR)* | Hands you a ready `gh pr create --draft` command with your reviewers, then asks for the link to the PR you created | GitHub CLI |
@@ -330,8 +330,8 @@ first name of `pull_request_status` is used by the "Зависшие PR" dashboa
 counted for one status name).
 
 `doing_status` is also matched against the task's **current** status: while the task already
-sits in one of those statuses, the Перевести в статус Doing *(transition to Doing)* item is
-hidden from the checklist. `pull_request_status` is matched against the transitions the task's
+sits in one of those statuses — or in any status outside Jira's "To Do" category — the
+Перевести в статус Doing *(transition to Doing)* item is hidden from the checklist. `pull_request_status` is matched against the transitions the task's
 workflow actually offers: if there is no transition into that status (some workflows don't have
 one, and the transition out of the current status disappears once the task is in it), the
 Перевести задачу в Pull Request item is hidden too — otherwise clicking it could only end in

@@ -33,9 +33,9 @@ final class ChecklistRepository
     private const HIDE_IF_STORY_POINTS_ALREADY_SET_CODE = 'story_points';
 
     /**
-     * Пункт скрывается, если задача в Jira уже в рабочем статусе (tasks.in_doing_status,
-     * обновляется при каждой синхронизации по [atlassian].doing_status) — переводить её
-     * туда повторно нечего. Правило по реальному статусу, а не по отметке в чек-листе:
+     * Пункт скрывается, если задача в Jira уже взята в работу (tasks.in_doing_status:
+     * статус из [atlassian].doing_status либо любой вне категории «To Do» — Pull request,
+     * Blocked, Done; обновляется при каждой синхронизации) — переводить её в Doing нечего. Правило по реальному статусу, а не по отметке в чек-листе:
      * задачу могли перевести в работу руками в Jira или из другого места.
      */
     private const HIDE_IF_ALREADY_IN_DOING_STATUS_CODE = 'status_doing';
