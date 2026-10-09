@@ -225,8 +225,12 @@ without it `config/params.ini` (your tokens), `storage/app.sqlite` and `.git` wo
 downloadable over HTTP:
 
 ```bash
-php -S localhost:8000 router.php
+PHP_CLI_SERVER_WORKERS=4 php -S localhost:8000 router.php
 ```
+
+`PHP_CLI_SERVER_WORKERS` lets the built-in server handle requests in parallel (Docker sets it in
+`docker-compose.yml`). Without it the server is single-threaded, and every checklist click waits
+behind the background Jira requests the app fires when its window regains focus.
 
 Then open: **http://localhost:8000/public/index.php** (or just http://localhost:8000 — it
 redirects there).
@@ -710,6 +714,7 @@ PHP logs when running under Docker: `docker compose logs -f app`.
 | LLM: `Connection refused` from Docker | `lmstudio_host` says `localhost` instead of `host.docker.internal`, or *Serve on Local Network* is off in LM Studio |
 | LLM: `404` from LM Studio | The Developer tab's server isn't *Running*, or LM Studio is older than 0.4 (no `/api/v1/chat`) |
 | Claude: `credit balance is too low` | Empty balance at platform.claude.com → Billing |
+| A checklist item hangs for a few seconds after a click (a spinner in place of the service icon) | The server handles requests one at a time and is busy with Jira. Under Docker `PHP_CLI_SERVER_WORKERS` is already set — recreate the container with `docker compose up -d`; with a local PHP start the server as shown in "Run" above |
 | Code changes don't show up | Aggressive browser caching. Static assets are versioned by mtime automatically; under Docker run `docker compose restart` after editing |
 | The dashboard above the input field is missing | `[atlassian]` isn't configured or Jira is unreachable — there is nothing to count, so the block hides itself. Check the `myself` call above |
 | A dashboard counter stays at `0` with an old task in that status | Days off are skipped, so the age is measured in working hours only: check `[worktime].non_working_days` and `[dashboard].stale_pull_request_hours` / `stale_blocked_hours`. Also make sure `pull_request_status` / `blocked_status` match the status names in Jira exactly |

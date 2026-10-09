@@ -465,6 +465,10 @@
     /** Минимальный интервал между перезапросами данных из Jira при возврате к окну —
      * общий для индикатора затреканного времени и показателей дашборда */
     const BACKGROUND_REFRESH_MS = 60 * 1000;
+
+    /** Через сколько показывать спиннер у пункта, если отметка в БД ещё не вернулась —
+     * быстрый ответ обходится без индикации, чтобы она не мелькала */
+    const ITEM_LOADING_DELAY_MS = 150;
     let todayTimeLoadedAt = 0;
     let todayTimeLoading = false;
 
@@ -1418,13 +1422,22 @@
 
     /** Отмечает пункт чек-листа выполненным (опционально передаёт доп. данные, например ветку) */
     async function markDone(checklistId, extra = {}) {
-        const data = await apiCall('../api/toggle.php', {
-            task_id: state.task.id,
-            checklist_id: checklistId,
-            done: true,
-            ...extra,
-        });
-        applyChecklistUpdate(data, checklistId);
+        // toggle.php обычно отвечает мгновенно, но может ждать свободного воркера сервера, пока
+        // идут фоновые запросы к Jira (возврат фокуса к окну). Спиннер — только если ответ
+        // задержался, иначе он мелькал бы на месте иконки сервиса при каждом клике
+        const loadingTimer = setTimeout(() => setItemLoading(checklistId, true), ITEM_LOADING_DELAY_MS);
+        try {
+            const data = await apiCall('../api/toggle.php', {
+                task_id: state.task.id,
+                checklist_id: checklistId,
+                done: true,
+                ...extra,
+            });
+            applyChecklistUpdate(data, checklistId);
+        } finally {
+            clearTimeout(loadingTimer);
+            setItemLoading(checklistId, false);
+        }
     }
 
     /**
@@ -1470,6 +1483,7 @@
         if (index <= 0) return;
 
         jumpInProgress = true;
+        setItemLoading(item.id, true);
         try {
             let data = null;
             for (const above of pending.slice(0, index)) {
@@ -1487,6 +1501,7 @@
             }
             renderChecklist();
         } finally {
+            setItemLoading(item.id, false);
             jumpInProgress = false;
         }
     }
@@ -2979,19 +2994,27 @@
      * под ними сломала бы текущее действие, догоним на следующем возврате.
      */
     let taskSyncedAt = 0;
+
+    /** Пункт в загрузке или анимации — перерисовка списка сейчас сломала бы его.
+     * В строгом режиме видимый .done — это пункт, который ещё улетает */
+    function isChecklistBusy() {
+        return Boolean(checklistEl.querySelector(STRICT_ORDER ? 'li.loading, li.leaving, li.done' : 'li.loading, li.leaving'));
+    }
+
     async function refreshTaskOnReturn() {
         if (!state.task || taskScreen.classList.contains('hidden')) return;
         if (Date.now() - taskSyncedAt < BACKGROUND_REFRESH_MS) return;
         if (!modalOverlay.classList.contains('hidden')) return;
-        // В строгом режиме видимый .done — это пункт, который ещё улетает
-        if (checklistEl.querySelector(STRICT_ORDER ? 'li.loading, li.leaving, li.done' : 'li.loading, li.leaving')) return;
+        if (isChecklistBusy()) return;
 
         taskSyncedAt = Date.now();
         const taskId = state.task.id;
         try {
             const data = await apiCall('../api/state.php', { link: state.task.task_link, refresh_jira: true });
-            // За время запроса могли открыть другую задачу или модалку — тогда ответ уже не к месту
+            // За время запроса могли открыть другую задачу, модалку или отметить пункт (запросы
+            // идут параллельно) — тогда ответ уже не к месту
             if (!state.task || state.task.id !== taskId || !modalOverlay.classList.contains('hidden')) return;
+            if (isChecklistBusy()) return;
             state.task = data.task;
             state.checklist = data.checklist;
             showTaskScreen();
