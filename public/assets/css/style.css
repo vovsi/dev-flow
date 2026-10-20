@@ -2108,7 +2108,6 @@ html[data-theme="dark"] .checklist-item:hover {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.28);
-    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
