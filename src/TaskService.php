@@ -376,6 +376,26 @@ final class TaskService
     }
 
     /**
+     * Отвязывает ветку от задачи — пункт создания ветки возвращается в чек-лист невыполненным.
+     * Сама ветка в git не трогается. Возвращает null, если задача не найдена.
+     */
+    public function clearGitBranch(int $taskId): ?array
+    {
+        $task = $this->tasks->findById($taskId);
+        if ($task === null) {
+            return null;
+        }
+
+        $this->tasks->clearGitBranch($taskId);
+        $this->checklist->resetBranchSteps($taskId);
+
+        return [
+            'task' => $this->tasks->findById($taskId),
+            'checklist' => $this->checklist->getStatusesForTask($taskId),
+        ];
+    }
+
+    /**
      * Полностью удаляет задачу и её чек-лист по ссылке/идентификатору.
      * Возвращает false, если задача не найдена.
      */

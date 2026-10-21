@@ -301,6 +301,7 @@
     const gitBranchValue = document.getElementById('git-branch-value');
     const gitActionsBtn = document.getElementById('git-actions-btn');
     const gitActionsPopover = document.getElementById('git-actions-popover');
+    const gitClearBranchBtn = document.getElementById('git-clear-branch-btn');
     const todayTimeEl = document.getElementById('today-time');
     const todayTimeValueEl = document.getElementById('today-time-value');
     const trackTimeBtn = document.getElementById('track-time-btn');
@@ -1050,13 +1051,39 @@
         }
     });
     gitActionsPopover.addEventListener('click', (e) => e.stopPropagation());
-    gitActionsPopover.querySelectorAll('.git-action-option').forEach((btn) => {
+    gitActionsPopover.querySelectorAll('.git-action-option[data-action]').forEach((btn) => {
         btn.addEventListener('click', async () => {
             const command = GIT_ACTION_COMMANDS[btn.dataset.action](state.task.git_branch, btn.dataset.base);
             await copyText(command);
             notifyCopied(command);
             gitActionsPopover.classList.add('hidden');
         });
+    });
+
+    // Отвязывает ветку от задачи (в git она остаётся) — пункт создания ветки возвращается
+    // в чек-лист невыполненным, см. TaskService::clearGitBranch
+    gitClearBranchBtn.addEventListener('click', async () => {
+        gitActionsPopover.classList.add('hidden');
+        const confirmed = await showModal(
+            'Удалить ветку из задачи?',
+            `<p>Ветка «${escapeHtml(state.task.git_branch)}» будет отвязана от задачи, а пункт создания ветки вернётся в чек-лист. В git ветка не удаляется.</p>`,
+            [
+                { label: 'Отмена', value: false },
+                { label: 'Удалить', primary: true, value: true },
+            ]
+        );
+        if (!confirmed) return;
+
+        try {
+            const data = await apiCall('../api/clear_git_branch.php', { task_id: state.task.id });
+            state.task = data.task;
+            state.checklist = data.checklist;
+            renderGitBranch();
+            renderChecklist();
+            showToast('Ветка удалена из задачи');
+        } catch (e) {
+            showToast(e.message || 'Не удалось удалить ветку');
+        }
     });
 
     // ==================== Рендер экрана задачи ====================

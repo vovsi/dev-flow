@@ -58,6 +58,16 @@ final class ChecklistRepository
     private const HIDE_IF_BRANCH_ALREADY_SET_CODE = 'git_branch';
 
     /**
+     * Шаги создания ветки — обычный и режима Claude Code Skill. Когда ветку отвязывают от задачи
+     * (TaskService::clearGitBranch), их отметки снимаются: иначе пункт вернулся бы в чек-лист
+     * уже выполненным и в строгой очерёдности так и остался бы невидимым.
+     */
+    private const BRANCH_STEP_CODES = [
+        'git_branch',
+        'skill_branch',
+    ];
+
+    /**
      * Пункты, которые скрываются у задачи, пока включён её собственный флаг
      * tasks.claude_code_skill_mode (по умолчанию включён у каждой новой задачи, переключается
      * per-task в настройках приложения при открытой задаче — раньше был общим конфигом
@@ -203,6 +213,16 @@ final class ChecklistRepository
             'task_id' => $taskId,
             'checklist_id' => $checklistId,
         ]);
+    }
+
+    public function resetBranchSteps(int $taskId): void
+    {
+        $placeholders = implode(',', array_fill(0, count(self::BRANCH_STEP_CODES), '?'));
+        $stmt = $this->db->prepare(
+            "UPDATE task_checklist SET is_done = 0
+             WHERE task_id = ? AND checklist_id IN (SELECT id FROM checklist WHERE code IN ($placeholders))"
+        );
+        $stmt->execute([$taskId, ...self::BRANCH_STEP_CODES]);
     }
 
     /**

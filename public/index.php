@@ -236,6 +236,8 @@ $assetVersion = static function (string $relativePath): string {
                     <?php foreach ($gitRebaseTargets as $target): ?>
                         <button class="git-action-option" data-action="rebase" data-base="<?= htmlspecialchars($target['base'], ENT_QUOTES) ?>">Rebase <?= htmlspecialchars($target['label'], ENT_QUOTES) ?></button>
                     <?php endforeach; ?>
+                    <div class="popover-divider"></div>
+                    <button id="git-clear-branch-btn" class="git-action-option git-action-option--danger">Удалить ветку из задачи</button>
                 </div>
             </div>
         </div>

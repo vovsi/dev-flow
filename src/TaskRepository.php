@@ -58,6 +58,12 @@ final class TaskRepository
         $stmt->execute(['branch' => $branch, 'id' => $taskId]);
     }
 
+    public function clearGitBranch(int $taskId): void
+    {
+        $stmt = $this->db->prepare('UPDATE tasks SET git_branch = NULL WHERE id = :id');
+        $stmt->execute(['id' => $taskId]);
+    }
+
     public function updateJiraData(
         int $taskId,
         string $title,

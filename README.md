@@ -80,7 +80,7 @@ database is just a file next to the code.
 |---|---|---|
 | Указать Story Points *(set Story Points)* | A modal with 1/2/3/5/8/13/21 (the team poker deck without the non-numeric `?` and `∞` cards) → writes the field in Jira. The item is hidden if Story Points are already set on the task | Jira |
 | Перевести в статус Doing *(transition to Doing)* | Transitions the Jira task to the status from your config. The item is hidden once the task is already in that status in Jira (for example, you moved it there by hand) or anywhere past "To Do" (Pull request, Blocked, Done…). The open task is re-read from Jira when you come back to the window (at most once a minute), so a status changed in Jira shows up without reopening the task | Jira |
-| Создать ветку в Git *(create a git branch)* | Generates a branch name with the LLM from the task title, copies it to the clipboard, stores it in the DB. The item is hidden once the task already has a branch name saved — the name itself stays at the bottom of the screen with its git commands dropdown | LLM (optional) |
+| Создать ветку в Git *(create a git branch)* | Generates a branch name with the LLM from the task title, copies it to the clipboard, stores it in the DB. The item is hidden once the task already has a branch name saved — the name itself stays at the bottom of the screen with its git commands dropdown; `Удалить ветку из задачи` there brings the item back | LLM (optional) |
 | Закоммитить код *(commit the code)* | A "what did you do" field → the LLM builds the commit message subject line in Conventional Commits form with the Jira key | LLM |
 | Создать PR *(create the PR)* | Hands you a ready `gh pr create --draft` command with your reviewers, then asks for the link to the PR you created | GitHub CLI |
 | Проверить PR Claude Code *(review the PR with Claude Code)* | Copies a ready review prompt with the PR link and links to your internal documentation | — |
@@ -132,7 +132,10 @@ exactly as you left them — ticks included.
 Independently of the checklist you also get: a back arrow in the top left corner (returns to the
 link screen so you can open another task), a "time logged today" indicator, quick time logging
 with a single slider, a list of today's tasks, and a git commands dropdown next to the branch
-name (`checkout -b`, `push`, `rebase` onto your base branches).
+name (`checkout -b`, `push`, `rebase` onto your base branches). The last entry of that dropdown,
+`Удалить ветку из задачи` *(remove the branch from the task)*, unlinks the saved branch name after
+a confirmation — the branch creation step (`Создать ветку в Git` or `Checkout Git Branch`) comes
+back to the checklist unticked. The branch itself in git is not touched.
 
 ### Time logging
 

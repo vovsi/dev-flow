@@ -342,12 +342,13 @@ body {
     right: 14px;
 }
 
-/* Дропдаун git-команд открывается вверх от иконки в футере */
+/* Дропдаун git-команд открывается вверх от иконки в футере и прижат к её правому краю, а не
+   центрирован: иконка стоит после названия ветки, и при длинной ветке оказывается у правого
+   края окна — центрированный дропдаун вылезал за окно 500×500 */
 .popover--git {
     position: absolute;
     bottom: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
+    right: 0;
     min-width: 190px;
 }
 
@@ -368,6 +369,14 @@ body {
 .theme-option:hover,
 .git-action-option:hover {
     background: var(--accent-soft);
+}
+
+.git-action-option--danger {
+    color: var(--danger);
+}
+
+.git-action-option--danger:hover {
+    background: var(--danger-soft);
 }
 
 /* Раздел «Claude» в попапе настроек — под пунктами темы, показывается только если фича
